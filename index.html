@@ -57,8 +57,14 @@
   }
   .header .title{font-size:16px;font-weight:700;letter-spacing:.02em;}
   .header .sub{font-size:11.5px;opacity:.92;font-weight:400;margin-top:1px;}
-  .header .status{margin-left:auto;font-size:11px;display:flex;align-items:center;gap:5px;opacity:.95;}
-  .header .dot{width:8px;height:8px;border-radius:50%;background:#9ff0c4;box-shadow:0 0 0 3px rgba(159,240,196,.3);}
+  .header .ai-status{
+    margin-left:auto;font-size:11px;display:flex;align-items:center;gap:5px;
+    background:rgba(255,255,255,.16);border:none;color:#fff;
+    padding:7px 11px;border-radius:99px;cursor:pointer;transition:.18s;
+  }
+  .header .ai-status:active{transform:scale(.96);}
+  .header .ai-status .dot{width:8px;height:8px;border-radius:50%;background:#9ff0c4;box-shadow:0 0 0 3px rgba(159,240,196,.3);}
+  .header .ai-status.off .dot{background:#d7dedb;box-shadow:none;}
 
   /* 進捗バー */
   .progress-wrap{padding:10px 18px 4px;background:var(--bg);position:sticky;top:70px;z-index:15;}
@@ -104,6 +110,11 @@
     border-top-right-radius:5px;
     color:var(--primary-dark);
     font-weight:600;
+  }
+  .bubble .ai-tag{
+    display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;
+    color:var(--primary);background:var(--primary-soft);
+    padding:1px 7px;border-radius:99px;margin-bottom:6px;
   }
 
   /* タイピングインジケータ */
@@ -192,6 +203,9 @@
   .lbl.merit{color:#2f8f5b;}
   .lbl.demerit{color:var(--warn);}
   .tc-section p{margin:0;font-size:13.5px;color:var(--text);}
+  .tc-reason-box{
+    background:var(--primary-soft);border-radius:10px;padding:9px 11px;
+  }
   .tc-select{
     width:100%;border:none;border-top:1px solid var(--line);
     background:#fff;color:var(--primary);font-weight:800;font-size:14.5px;
@@ -248,7 +262,7 @@
     border-radius:99px;padding:9px 20px;font-size:12.5px;cursor:pointer;
   }
 
-  /* モーダル（ダミー相談） */
+  /* モーダル共通 */
   .modal-bg{
     position:fixed;inset:0;background:rgba(47,58,54,.5);z-index:50;
     display:none;align-items:flex-end;justify-content:center;
@@ -269,6 +283,27 @@
     padding:14px;font-size:15px;font-weight:700;cursor:pointer;
   }
   .modal .m-demo{font-size:11px;color:#b0bbb5;margin-top:12px;}
+
+  /* AI設定モーダル */
+  .settings .s-row{text-align:left;margin-bottom:14px;}
+  .settings label{font-size:12.5px;font-weight:700;color:var(--text);display:block;margin-bottom:6px;}
+  .settings input{
+    width:100%;border:1.5px solid var(--line);border-radius:12px;
+    padding:12px 14px;font-size:14px;font-family:inherit;color:var(--text);
+  }
+  .settings input:focus{outline:none;border-color:var(--primary);}
+  .settings .warn-box{
+    background:#fdf3ec;border:1px solid #f3d9c4;border-radius:12px;
+    padding:11px 13px;font-size:11.5px;color:#9a6a42;text-align:left;line-height:1.55;margin-bottom:16px;
+  }
+  .settings .btn-row{display:flex;gap:8px;}
+  .settings .btn-row button{
+    flex:1;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;border:none;
+  }
+  .settings .save{background:var(--primary);color:#fff;}
+  .settings .clear{background:transparent;color:var(--warn);border:1.5px solid var(--line);}
+  .settings .s-state{font-size:12px;margin-bottom:14px;text-align:left;color:var(--text-sub);}
+  .settings .s-state b{color:var(--primary-dark);}
 </style>
 </head>
 <body>
@@ -279,7 +314,9 @@
       <div class="title">かいごの相談チャット</div>
       <div class="sub">あんしん施設さがしサポート</div>
     </div>
-    <div class="status"><span class="dot"></span>相談員AI 対応中</div>
+    <button class="ai-status off" id="aiStatus" onclick="openSettings()">
+      <span class="dot"></span><span id="aiStatusText">AI設定</span>
+    </button>
   </div>
 
   <div class="progress-wrap">
@@ -290,7 +327,7 @@
   <div class="chat" id="chat"></div>
 </div>
 
-<!-- ダミーモーダル -->
+<!-- ダミー相談モーダル -->
 <div class="modal-bg" id="modalBg">
   <div class="modal">
     <div class="m-icon">💬</div>
@@ -298,6 +335,28 @@
     <p>ご入力ありがとうございます。専門の相談員より、ご希望に合わせて施設のご案内・見学のお手伝いをいたします。お電話またはメールでご連絡いたします。</p>
     <button class="m-close" onclick="closeModal()">わかりました</button>
     <div class="m-demo">※ これはプロトタイプのデモ画面です</div>
+  </div>
+</div>
+
+<!-- AI設定モーダル -->
+<div class="modal-bg" id="settingsBg">
+  <div class="modal settings">
+    <div class="m-icon">✨</div>
+    <h3>AIパーソナライズ設定</h3>
+    <p>Claude APIキーを設定すると、ご回答に合わせて相談員AIが提案理由をその人専用に生成し、自由記述を深掘りしてお聞きします。</p>
+    <div class="s-state">現在の状態：<b id="settingsState">未設定（固定文で動作します）</b></div>
+    <div class="s-row">
+      <label for="apiKeyInput">Anthropic APIキー</label>
+      <input id="apiKeyInput" type="password" placeholder="sk-ant-..." autocomplete="off">
+    </div>
+    <div class="warn-box">
+      ⚠️ これはプロトタイプ用です。APIキーはこの端末のブラウザ（localStorage）にのみ保存され、ブラウザから直接Anthropicへ送信されます。<b>本番運用ではキーが利用者に露出するため、サーバー経由での呼び出しが必要です。</b>共有端末では使用後に「削除」してください。
+    </div>
+    <div class="btn-row">
+      <button class="clear" onclick="clearKey()">削除</button>
+      <button class="save" onclick="saveKey()">保存して閉じる</button>
+    </div>
+    <div class="m-demo" style="margin-top:14px;">キー未設定でも、すべての機能は固定文で動作します。</div>
   </div>
 </div>
 
@@ -408,13 +467,73 @@ const FACILITIES = {
 /* ============================================================
    状態管理
    ============================================================ */
-const state = { area:null, care:null, dementia:null, budget:null, free:"", chosenType:null };
+const state = { area:null, care:null, dementia:null, budget:null, free:"", deepDive:[], chosenType:null, top3:[] };
 let step = 0;
 const TOTAL_STEPS = 7; // ステップ1〜7を進捗に反映
 
 const chat = document.getElementById('chat');
 const progressFill = document.getElementById('progressFill');
 const progressLabel = document.getElementById('progressLabel');
+
+/* ============================================================
+   Claude API 連携
+   ------------------------------------------------------------
+   単一HTMLのプロトタイプのため、ブラウザから直接 Anthropic API を
+   呼び出します（anthropic-dangerous-direct-browser-access）。
+   APIキーは localStorage に保存。未設定時はすべて固定文で動作。
+   ============================================================ */
+const MODEL = "claude-opus-4-8";
+let apiKey = localStorage.getItem("anthropicApiKey") || "";
+
+function aiEnabled(){ return !!apiKey; }
+
+// Messages API 呼び出し（構造化出力対応）。失敗時は例外を投げる。
+async function claudeMessages({ system, messages, maxTokens = 1024, schema = null }){
+  const body = { model: MODEL, max_tokens: maxTokens, system, messages };
+  if(schema){ body.output_config = { format: { type: "json_schema", schema } }; }
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify(body)
+  });
+  if(!res.ok){
+    let detail = "";
+    try { detail = (await res.json())?.error?.message || ""; } catch(_){}
+    throw new Error("Claude API error " + res.status + (detail ? "： " + detail : ""));
+  }
+  const data = await res.json();
+  if(data.stop_reason === "refusal") throw new Error("refusal");
+  return (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+}
+
+// 相談員ペルソナ（共通の語り口）
+const PERSONA = `あなたは介護施設さがしに寄り添う、経験豊富で信頼される相談員です。
+施設を探すご家族は不安や戸惑い、罪悪感を抱えていることが多いことを理解しています。
+語り口は、やさしく、誠実で、安心感のあるトーン。専門性は保ちつつ、専門用語は噛み砕きます。
+「ありがとうございます。把握しました」のようなテンプレ的な決まり文句の繰り返しは避け、相手の言葉に具体的に応答してください。`;
+
+// これまでの回答をテキスト化（プロンプトに渡す）
+function profileText(){
+  const lines = [
+    "・お探しの地域：" + (state.area || "未選択"),
+    "・要介護度：" + (state.care || "未選択"),
+    "・認知症の状況：" + (state.dementia || "未選択"),
+    "・月額のご予算：" + (state.budget || "未選択"),
+    "・施設を探そうと思った理由／気がかりなこと：" + (state.free ? state.free : "（未記入）")
+  ];
+  if(state.deepDive && state.deepDive.length){
+    lines.push("・相談員との深掘り対話：");
+    state.deepDive.forEach(m=>{
+      lines.push("    " + (m.role === "assistant" ? "相談員" : "ご家族") + "「" + m.text + "」");
+    });
+  }
+  return lines.join("\n");
+}
 
 /* ============================================================
    ユーティリティ：吹き出し・選択肢の描画
@@ -427,27 +546,38 @@ function updateProgress(n,label){
   progressLabel.textContent = label || ("ステップ " + n + " / " + TOTAL_STEPS);
 }
 
-function botBubble(text){
+function escapeHtml(s){
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function botBubble(text, {ai=false, raw=false} = {}){
   const row = document.createElement('div');
   row.className = 'row bot';
-  row.innerHTML = `<div class="mini-avatar">🌿</div><div class="bubble">${text}</div>`;
+  const inner = raw ? text : escapeHtml(text);
+  const tag = ai ? `<span class="ai-tag">✨ AI相談員</span>` : "";
+  row.innerHTML = `<div class="mini-avatar">🌿</div><div class="bubble">${tag}${inner}</div>`;
   chat.appendChild(row); scrollDown();
   return row;
 }
 function userBubble(text){
   const row = document.createElement('div');
   row.className = 'row user';
-  row.innerHTML = `<div class="bubble">${text}</div>`;
+  row.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
   chat.appendChild(row); scrollDown();
 }
 
-// タイピング演出 → コールバック
+// タイピング演出（タイマー後にコールバック）
 function botTyping(delay, cb){
+  const row = startTyping();
+  setTimeout(()=>{ row.remove(); cb(); }, delay);
+}
+// 持続的なタイピングバブル（API待ち用）。呼び出し側で .remove()
+function startTyping(){
   const row = document.createElement('div');
   row.className = 'row bot';
   row.innerHTML = `<div class="mini-avatar">🌿</div><div class="bubble typing"><span></span><span></span><span></span></div>`;
   chat.appendChild(row); scrollDown();
-  setTimeout(()=>{ row.remove(); cb(); }, delay);
+  return row;
 }
 
 // 複数の吹き出しを順に出す
@@ -455,7 +585,7 @@ function botSequence(messages, done){
   let i = 0;
   function next(){
     if(i >= messages.length){ if(done) done(); return; }
-    botTyping(messages[i].d || 700, ()=>{ botBubble(messages[i].t); i++; next(); });
+    botTyping(messages[i].d || 700, ()=>{ botBubble(messages[i].t, {raw:true}); i++; next(); });
   }
   next();
 }
@@ -478,6 +608,30 @@ function showOptions(options, onPick){
   chat.appendChild(wrap); scrollDown();
 }
 
+// 自由記述入力。skip可否を選べる
+function showTextInput({placeholder, hint, sendLabel, allowSkip, onSend, onSkip}){
+  const wrap = document.createElement('div');
+  wrap.className = 'free-input';
+  wrap.innerHTML = `
+    <textarea placeholder="${placeholder||""}"></textarea>
+    ${hint?`<div class="hint">${hint}</div>`:""}
+    <div class="send-row">
+      <button class="send-btn">${sendLabel||"送信する"}</button>
+      ${allowSkip?`<button class="skip-btn">スキップ</button>`:""}
+    </div>`;
+  chat.appendChild(wrap); scrollDown();
+  const ta = wrap.querySelector('textarea');
+  ta.focus();
+  wrap.querySelector('.send-btn').onclick = ()=>{
+    const v = ta.value.trim();
+    wrap.remove();
+    onSend(v);
+  };
+  if(allowSkip){
+    wrap.querySelector('.skip-btn').onclick = ()=>{ wrap.remove(); onSkip(); };
+  }
+}
+
 /* ============================================================
    会話フロー
    ============================================================ */
@@ -485,7 +639,7 @@ function start(){
   step = 0;
   updateProgress(0, "はじめます");
   botSequence([
-    {t:"こんにちは。介護施設さがしのお手伝いをする相談員AIです🌿", d:500},
+    {t:"こんにちは。介護施設さがしのお手伝いをする相談員です🌿", d:500},
     {t:"はじめての施設さがしは、わからないことや不安も多いですよね。いくつか質問しながら、ご本人に合った施設をいっしょに考えていきます。", d:900},
     {t:"答えやすい質問から、ボタンで選んでいきましょう。気がかりなことは、あとでじっくりお聞きしますね。", d:900}
   ], askArea);
@@ -495,7 +649,7 @@ function start(){
 function askArea(){
   updateProgress(1, "ステップ1 / 7　地域");
   botTyping(700, ()=>{
-    botBubble("まず、施設をお探しの<b>地域</b>を教えてください。");
+    botBubble("まず、施設をお探しの<b>地域</b>を教えてください。", {raw:true});
     showOptions([
       {ic:"📍", label:"世田谷区", value:"世田谷区"},
       {ic:"📍", label:"目黒区", value:"目黒区"},
@@ -525,7 +679,7 @@ function askCare(){
 function askDementia(){
   updateProgress(3, "ステップ3 / 7　認知症");
   botTyping(700, ()=>{
-    botBubble("<b>認知症</b>の症状について、いちばん近いものを教えてください。");
+    botBubble("<b>認知症</b>の症状について、いちばん近いものを教えてください。", {raw:true});
     showOptions([
       {ic:"😊", label:"なし", sub:"診断や目立つ症状はない", value:"認知症なし"},
       {ic:"🍃", label:"軽度", sub:"もの忘れなど。生活はおおむね自立", value:"認知症（軽度）"},
@@ -549,51 +703,115 @@ function askBudget(){
   });
 }
 
-// ステップ5：自由記述
+// ステップ5：自由記述（→ AIによる深掘り対話へ）
 function askFree(){
   updateProgress(5, "ステップ5 / 7　気がかりなこと");
   botSequence([
     {t:"ここまでありがとうございます。最後に、いちばん大切なことをお聞きします。", d:700},
     {t:"今、施設を探そうと思った<b>理由</b>や、ご本人・ご家族で<b>気がかりなこと</b>を、どんなことでも教えてください。文章でかまいません🌿", d:1000}
-  ], showFreeInput);
+  ], ()=>{
+    showTextInput({
+      placeholder:"例）一人暮らしの母の物忘れが進み、火の元が心配です。本人は自宅にいたい気持ちもあり、家族として何が一番良いか迷っています…",
+      hint:"💡 短くても、まとまっていなくても大丈夫です。",
+      sendLabel:"この内容で相談する",
+      allowSkip:true,
+      onSend:(v)=>{ state.free = v; userBubble(v ? v : "（特にありません）"); startDeepDive(); },
+      onSkip:()=>{ state.free = ""; userBubble("（あとで相談員に伝えます）"); proposeTypes(); }
+    });
+  });
 }
 
-function showFreeInput(){
-  const wrap = document.createElement('div');
-  wrap.className = 'free-input';
-  wrap.innerHTML = `
-    <textarea id="freeText" placeholder="例）一人暮らしの母の物忘れが進み、火の元が心配です。本人は自宅にいたい気持ちもあり、家族として何が一番良いか迷っています…"></textarea>
-    <div class="hint">💡 短くても、まとまっていなくても大丈夫です。</div>
-    <div class="send-row">
-      <button class="send-btn" id="freeSend">この内容で相談する</button>
-      <button class="skip-btn" id="freeSkip">スキップ</button>
-    </div>`;
-  chat.appendChild(wrap); scrollDown();
-  const ta = wrap.querySelector('#freeText');
-  ta.focus();
-  wrap.querySelector('#freeSend').onclick = ()=>{
-    const v = ta.value.trim();
-    state.free = v;
-    wrap.remove();
-    userBubble(v ? v : "（特にありません）");
-    proposeTypes();
-  };
-  wrap.querySelector('#freeSkip').onclick = ()=>{
-    state.free = "";
-    wrap.remove();
-    userBubble("（あとで相談員に伝えます）");
-    proposeTypes();
-  };
+/* ============================================================
+   ステップ5b：AIによる深掘り対話（最大2往復）
+   ============================================================ */
+const DEEP_SCHEMA = {
+  type: "object",
+  properties: {
+    message: { type: "string" },
+    need_more: { type: "boolean" }
+  },
+  required: ["message", "need_more"],
+  additionalProperties: false
+};
+
+function deepSystem(){
+  return PERSONA + `
+
+【今の状況（ご家族のこれまでの回答）】
+${profileText()}
+
+【あなたのタスク】
+ご家族が書いてくださった「探そうと思った理由・気がかりなこと」に対して、まず気持ちに具体的に寄り添う返答をしてください。そのうえで、施設の種別選びの参考になる背景（ご本人の希望、ご家族の事情、医療面、これまでの経緯、譲れない点など）をもっと知りたい場合は、やわらかく1つだけ具体的な質問を添えてください。
+- 返答は2〜4文程度。相手の言葉を受けとめ、決めつけずに。
+- まだ深く聞きたいことがあれば need_more=true とし、message の最後に質問を1つ入れる。
+- 十分に背景が見えた、またはこれ以上聞く必要がないと感じたら need_more=false とし、message は気持ちに寄り添う短い締めくくり（質問なし）にして、これから合う施設の種別を提案する流れにつなげる。
+- 出力は必ず指定のJSON形式で。`;
+}
+
+async function startDeepDive(){
+  updateProgress(5, "ステップ5 / 7　気がかりなこと");
+
+  // APIキー未設定：従来どおり1往復で次へ
+  if(!aiEnabled()){
+    botSequence([
+      {t:"お気持ち、しっかり受け取りました。おひとりで抱えず、ここまで進めてくださってありがとうございます。", d:900}
+    ], proposeTypes);
+    return;
+  }
+
+  if(state.free === ""){ proposeTypes(); return; }
+
+  state.deepDive = [];
+  const convo = [{ role:"user", content: state.free }];
+  let rounds = 0;
+  const MAX_FOLLOWUPS = 2;
+
+  async function runTurn(){
+    const typing = startTyping();
+    let result;
+    try{
+      const txt = await claudeMessages({ system: deepSystem(), messages: convo, maxTokens: 700, schema: DEEP_SCHEMA });
+      result = JSON.parse(txt);
+    }catch(e){
+      typing.remove();
+      notifyAiError(e);
+      botBubble("いただいた内容も大切にしながら、合いそうな施設の種別をご提案しますね。");
+      proposeTypes();
+      return;
+    }
+    typing.remove();
+    botBubble(result.message, {ai:true});
+    state.deepDive.push({ role:"assistant", text: result.message });
+    convo.push({ role:"assistant", content: result.message });
+
+    if(result.need_more && rounds < MAX_FOLLOWUPS){
+      rounds++;
+      showTextInput({
+        placeholder:"お気持ちのままで大丈夫です…",
+        sendLabel:"返信する",
+        allowSkip:true,
+        onSend:(v)=>{
+          if(!v){ proposeTypes(); return; }
+          userBubble(v);
+          convo.push({ role:"user", content: v });
+          state.deepDive.push({ role:"user", text: v });
+          runTurn();
+        },
+        onSkip:()=>{ proposeTypes(); }
+      });
+    } else {
+      proposeTypes();
+    }
+  }
+  runTurn();
 }
 
 /* ============================================================
    ステップ6：種別判定ロジック → トップ3提案
    ============================================================ */
 function rankTypes(){
-  // 各種別にスコアを付与
   const score = {groupHome:0,tokuyo:0,kaigotsuki:0,jutaku:0,sakou:0,roken:0,carehouse:0};
 
-  // --- 要介護度 ---
   switch(state.care){
     case "自立":
       score.sakou+=4; score.carehouse+=4; score.jutaku+=3; break;
@@ -607,16 +825,13 @@ function rankTypes(){
       score.jutaku+=2; score.sakou+=2; score.kaigotsuki+=2; score.roken+=1; break;
   }
 
-  // --- 認知症（あり=軽度/中度以上ではグループホームを強く加点） ---
   if(state.dementia === "認知症（中度以上）"){
     score.groupHome+=6; score.kaigotsuki+=2; score.tokuyo+=1;
-    // 自立寄りでも認知症中度以上なら見守りの薄い形は減点
     score.sakou-=2; score.carehouse-=2; score.jutaku-=1;
   } else if(state.dementia === "認知症（軽度）"){
     score.groupHome+=3; score.kaigotsuki+=1;
   }
 
-  // --- 予算 ---
   switch(state.budget){
     case "月額15万円以下":
       score.tokuyo+=3; score.carehouse+=3; score.sakou+=2; score.roken+=1;
@@ -627,15 +842,13 @@ function rankTypes(){
       score.kaigotsuki+=4; score.jutaku+=2; score.groupHome+=1; break;
   }
 
-  // 並べ替え（同点は定義順）
   const order = Object.keys(CARE_TYPES);
   let ranked = order.map(k=>({key:k, s:score[k]})).sort((a,b)=> b.s - a.s || order.indexOf(a.key)-order.indexOf(b.key));
 
-  // --- 重要ルール：認知症あり（軽度/中度以上）ならグループホームを必ずトップ3上位に ---
+  // 重要ルール：認知症あり（軽度/中度以上）はグループホームを必ずトップ3上位に
   const hasDementia = state.dementia === "認知症（軽度）" || state.dementia === "認知症（中度以上）";
   if(hasDementia){
     ranked = ranked.filter(r=>r.key!=="groupHome");
-    // 中度以上は1位、軽度は2位以内に配置
     const pos = (state.dementia === "認知症（中度以上）") ? 0 : Math.min(1, ranked.length);
     ranked.splice(pos, 0, {key:"groupHome", s:score.groupHome});
   }
@@ -643,10 +856,10 @@ function rankTypes(){
   return ranked.slice(0,3).map(r=>r.key);
 }
 
-// 種別ごとの「あなた向けのおすすめ理由」を回答に応じて生成
+// 固定の「おすすめ理由」（AI未使用時のフォールバック）
 function reasonFor(key){
   const careTxt = state.care;
-  const budTxt = state.budget.replace("月額","");
+  const budTxt = (state.budget||"").replace("月額","");
   const dem = state.dementia;
   switch(key){
     case "groupHome":
@@ -670,50 +883,106 @@ function reasonFor(key){
   return "";
 }
 
+// AIで種別トップ3の「おすすめ理由」を生成（失敗時 null）
+const TYPE_REASON_SCHEMA = {
+  type: "object",
+  properties: {
+    reasons: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { key: { type: "string" }, reason: { type: "string" } },
+        required: ["key", "reason"],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ["reasons"],
+  additionalProperties: false
+};
+
+async function generateTypeReasons(keys){
+  if(!aiEnabled()) return null;
+  const typesInfo = keys.map(k=>({ key:k, name:CARE_TYPES[k].name, 特徴:CARE_TYPES[k].tag }));
+  const system = PERSONA + `
+
+【タスク】
+ご家族の状況をすべて踏まえ、提案する各「介護施設の種別」について、このご家族に向けた『おすすめ理由』を1つずつ生成してください。
+- 各理由は1〜2文（60〜120字程度）。
+- 地域・要介護度・認知症・予算に加え、自由記述や深掘り対話で語られた感情・背景を必ず反映し、その人専用の言葉にすること。
+- 「なぜこの方にこの種別が合うのか」が伝わるように。一般論の繰り返しは避ける。
+- key には渡された種別の key をそのまま使うこと。`;
+  const userContent =
+    "■ご家族の状況\n" + profileText() +
+    "\n\n■提案する種別（この3つそれぞれに理由を）\n" + JSON.stringify(typesInfo, null, 2);
+  const txt = await claudeMessages({
+    system,
+    messages: [{ role:"user", content: userContent }],
+    maxTokens: 1500,
+    schema: TYPE_REASON_SCHEMA
+  });
+  const data = JSON.parse(txt);
+  const map = {};
+  (data.reasons || []).forEach(r => { map[r.key] = r.reason; });
+  return map;
+}
+
 function proposeTypes(){
   updateProgress(6, "ステップ6 / 7　合う種別");
   const top3 = rankTypes();
-  const empathy = state.free
-    ? "お気持ち、しっかり受け取りました。おひとりで抱えず、ここまで進めてくださってありがとうございます。"
-    : "ここまでありがとうございます。";
+  state.top3 = top3;
 
-  botSequence([
-    {t:empathy, d:900},
-    {t:"いきなり施設をご案内する前に、まずご本人に<b>合いそうな『施設の種別』をトップ3</b>でご提案します。それぞれのメリット・デメリットも添えますので、ピンとくるものをお選びください🌿", d:1100}
-  ], ()=>{
-    botTyping(900, ()=>{
-      renderTypeCards(top3);
-    });
+  const intros = [];
+  if(!(state.deepDive && state.deepDive.length)){
+    intros.push({ t: state.free
+      ? "お気持ち、しっかり受け取りました。おひとりで抱えず、ここまで進めてくださってありがとうございます。"
+      : "ここまでありがとうございます。", d:900 });
+  }
+  intros.push({ t:"いきなり施設をご案内する前に、まずご本人に<b>合いそうな『施設の種別』をトップ3</b>でご提案します。それぞれのメリット・デメリットも添えますので、ピンとくるものをお選びください🌿", d:1100 });
+
+  botSequence(intros, async ()=>{
+    if(aiEnabled()){
+      const typing = startTyping();
+      let reasons = null;
+      try{ reasons = await generateTypeReasons(top3); }
+      catch(e){ notifyAiError(e); reasons = null; }
+      typing.remove();
+      renderTypeCards(top3, reasons);
+    } else {
+      botTyping(900, ()=> renderTypeCards(top3, null));
+    }
   });
 }
 
-function renderTypeCards(keys){
+function renderTypeCards(keys, reasons){
   const wrap = document.createElement('div');
   wrap.className = 'type-cards';
   keys.forEach((k,i)=>{
     const t = CARE_TYPES[k];
+    const reasonText = (reasons && reasons[k]) ? reasons[k] : reasonFor(k);
+    const aiTag = (reasons && reasons[k]) ? `<span class="ai-tag">✨ AIがあなた向けに生成</span> ` : "";
     const card = document.createElement('div');
     card.className = 'type-card';
     card.innerHTML = `
       <div class="tc-head">
         <div class="rank-badge r${i+1}">${i+1}</div>
         <div>
-          <div class="tc-name">${t.name}</div>
-          <div class="tc-tag">${t.tag}</div>
+          <div class="tc-name">${escapeHtml(t.name)}</div>
+          <div class="tc-tag">${escapeHtml(t.tag)}</div>
         </div>
       </div>
       <div class="tc-body">
         <div class="tc-section">
           <span class="lbl reason">🎯 あなたへのおすすめ理由</span>
-          <p>${reasonFor(k)}</p>
+          <div class="tc-reason-box"><p>${aiTag}${escapeHtml(reasonText)}</p></div>
         </div>
         <div class="tc-section">
           <span class="lbl merit">⭕ メリット</span>
-          <p>${t.merit}</p>
+          <p>${escapeHtml(t.merit)}</p>
         </div>
         <div class="tc-section">
           <span class="lbl demerit">⚠️ 知っておきたい点</span>
-          <p>${t.demerit}</p>
+          <p>${escapeHtml(t.demerit)}</p>
         </div>
       </div>
       <button class="tc-select">この種別の施設を見る ▶</button>`;
@@ -732,46 +1001,102 @@ function renderTypeCards(keys){
 /* ============================================================
    ステップ7：施設トップ5 → ステップ8：相談CTA
    ============================================================ */
+const FAC_REASON_SCHEMA = {
+  type: "object",
+  properties: {
+    reasons: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { name: { type: "string" }, reason: { type: "string" } },
+        required: ["name", "reason"],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ["reasons"],
+  additionalProperties: false
+};
+
+async function generateFacilityReasons(key){
+  if(!aiEnabled()) return null;
+  const list = (FACILITIES[key] || []).map(f=>({
+    name: f.name, エリア: f.area, 月額: f.price,
+    残室: f.rooms === 0 ? "満室・空き待ち" : `残り${f.rooms}室`
+  }));
+  const system = PERSONA + `
+
+【タスク】
+選ばれた介護施設の種別「${CARE_TYPES[key].name}」に該当する各施設について、このご家族に向けた『おすすめ理由』を一文ずつ生成してください。
+- 各理由は施設カードに載せる一文（40〜70字程度）。
+- ご家族の状況（地域・要介護度・認知症・予算・自由記述・深掘り対話）を踏まえ、その施設のどこがこの方に合うのかを具体的に。
+- 施設名(name)は渡されたものをそのまま使うこと。誇張や事実の創作は避け、自然で信頼感のある表現で。`;
+  const userContent =
+    "■ご家族の状況\n" + profileText() +
+    "\n\n■対象の施設一覧\n" + JSON.stringify(list, null, 2);
+  const txt = await claudeMessages({
+    system,
+    messages: [{ role:"user", content: userContent }],
+    maxTokens: 1600,
+    schema: FAC_REASON_SCHEMA
+  });
+  const data = JSON.parse(txt);
+  const map = {};
+  (data.reasons || []).forEach(r => { map[r.name] = r.reason; });
+  return map;
+}
+
 function proposeFacilities(key){
   updateProgress(7, "ステップ7 / 7　おすすめ施設");
   const t = CARE_TYPES[key];
   botSequence([
     {t:`「${t.name}」ですね。承知しました。`, d:700},
     {t:`${state.area}周辺で、ご条件に合う<b>${t.name}をトップ5</b>でご紹介します🌿　残室はリアルタイムで変わるため、気になる施設はお早めにご相談ください。`, d:1000}
-  ], ()=>{
-    botTyping(1000, ()=>{
-      renderFacilityCards(key);
-      // CTA
+  ], async ()=>{
+    let reasons = null;
+    if(aiEnabled()){
+      const typing = startTyping();
+      try{ reasons = await generateFacilityReasons(key); }
+      catch(e){ notifyAiError(e); reasons = null; }
+      typing.remove();
+      renderFacilityCards(key, reasons);
       botTyping(700, showCTA);
-    });
+    } else {
+      botTyping(1000, ()=>{
+        renderFacilityCards(key, null);
+        botTyping(700, showCTA);
+      });
+    }
   });
 }
 
-function renderFacilityCards(key){
+function renderFacilityCards(key, reasons){
   const list = FACILITIES[key] || [];
   const wrap = document.createElement('div');
   wrap.className = 'facility-cards';
   list.forEach((f,i)=>{
-    const roomClass = f.rooms===0 ? 'room few' : (f.rooms<=1 ? 'room few' : 'room');
+    const roomClass = (f.rooms<=1) ? 'room few' : 'room';
     const roomTxt = f.rooms===0 ? '満室・空き待ち' : `残り${f.rooms}室`;
+    const reasonText = (reasons && reasons[f.name]) ? reasons[f.name] : f.reason;
+    const qLabel = (reasons && reasons[f.name]) ? "✨おすすめ" : "おすすめ";
     const card = document.createElement('div');
     card.className = 'fac-card';
     card.innerHTML = `
       <div class="fac-rank">${i+1}</div>
-      <div class="fac-name">${f.name}</div>
+      <div class="fac-name">${escapeHtml(f.name)}</div>
       <div class="fac-meta">
-        <span class="chip">📍 ${f.area}</span>
-        <span class="chip price">💴 月額 ${f.price}</span>
+        <span class="chip">📍 ${escapeHtml(f.area)}</span>
+        <span class="chip price">💴 月額 ${escapeHtml(f.price)}</span>
         <span class="chip ${roomClass}">🛏️ ${roomTxt}</span>
       </div>
-      <div class="fac-reason"><span class="q">おすすめ</span><span>${f.reason}</span></div>`;
+      <div class="fac-reason"><span class="q">${qLabel}</span><span>${escapeHtml(reasonText)}</span></div>`;
     wrap.appendChild(card);
   });
   chat.appendChild(wrap); scrollDown();
 }
 
 function showCTA(){
-  botBubble("気になる施設は見つかりましたか？　ここから先は、空室確認・費用の詳細・見学予約まで、<b>専門の相談員が無料で</b>サポートします。");
+  botBubble("気になる施設は見つかりましたか？　ここから先は、空室確認・費用の詳細・見学予約まで、<b>専門の相談員が無料で</b>サポートします。", {raw:true});
   const box = document.createElement('div');
   box.className = 'cta-box';
   box.innerHTML = `
@@ -784,28 +1109,75 @@ function showCTA(){
   box.querySelector('#ctaBtn').onclick = openModal;
   scrollDown();
 
-  // リスタート
   const r = document.createElement('div');
   r.className = 'restart';
   r.innerHTML = `<button id="restartBtn">↺ 最初からやり直す</button>`;
   chat.appendChild(r);
   r.querySelector('#restartBtn').onclick = ()=>{
     chat.innerHTML = '';
-    Object.assign(state,{area:null,care:null,dementia:null,budget:null,free:"",chosenType:null});
+    Object.assign(state,{area:null,care:null,dementia:null,budget:null,free:"",deepDive:[],chosenType:null,top3:[]});
     start();
   };
   scrollDown();
 }
 
 /* ============================================================
-   ダミーモーダル
+   ダミー相談モーダル
    ============================================================ */
 const modalBg = document.getElementById('modalBg');
 function openModal(){ modalBg.classList.add('show'); }
 function closeModal(){ modalBg.classList.remove('show'); }
 modalBg.addEventListener('click', e=>{ if(e.target===modalBg) closeModal(); });
 
+/* ============================================================
+   AI設定モーダル
+   ============================================================ */
+const settingsBg = document.getElementById('settingsBg');
+const aiStatusEl = document.getElementById('aiStatus');
+const aiStatusText = document.getElementById('aiStatusText');
+const settingsState = document.getElementById('settingsState');
+
+function refreshAiStatus(){
+  if(aiEnabled()){
+    aiStatusEl.classList.remove('off');
+    aiStatusText.textContent = "AI: オン";
+    settingsState.textContent = "設定済み（AIパーソナライズ有効）";
+  } else {
+    aiStatusEl.classList.add('off');
+    aiStatusText.textContent = "AI設定";
+    settingsState.textContent = "未設定（固定文で動作します）";
+  }
+}
+function openSettings(){
+  document.getElementById('apiKeyInput').value = apiKey;
+  refreshAiStatus();
+  settingsBg.classList.add('show');
+}
+function closeSettings(){ settingsBg.classList.remove('show'); }
+function saveKey(){
+  apiKey = document.getElementById('apiKeyInput').value.trim();
+  if(apiKey) localStorage.setItem("anthropicApiKey", apiKey);
+  else localStorage.removeItem("anthropicApiKey");
+  refreshAiStatus();
+  closeSettings();
+}
+function clearKey(){
+  apiKey = "";
+  localStorage.removeItem("anthropicApiKey");
+  document.getElementById('apiKeyInput').value = "";
+  refreshAiStatus();
+}
+settingsBg.addEventListener('click', e=>{ if(e.target===settingsBg) closeSettings(); });
+
+// AIエラーをそっと通知（フロー自体は固定文で継続）
+function notifyAiError(e){
+  const msg = (e && e.message) ? e.message : "";
+  if(msg === "refusal") return; // 安全上の拒否は黙って固定文へ
+  botBubble("（AIパーソナライズの呼び出しに問題がありました。固定の案内に切り替えます。APIキーや通信をご確認ください）", {ai:false});
+}
+
 /* 起動 */
+refreshAiStatus();
 start();
 </script>
 </body>
