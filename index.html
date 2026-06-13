@@ -149,6 +149,36 @@
   .opt-btn:active{transform:scale(.98);}
   .opt-btn:hover{border-color:var(--primary);background:var(--primary-soft);}
 
+  /* 複数選択（チェック式） */
+  .opt-btn.sel{border-color:var(--primary);background:var(--primary-soft);}
+  .opt-btn .chk{
+    margin-left:auto;width:22px;height:22px;border-radius:50%;
+    border:2px solid var(--line);display:flex;align-items:center;justify-content:center;
+    font-size:13px;color:transparent;flex-shrink:0;transition:.15s;
+  }
+  .opt-btn.sel .chk{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .confirm-row{padding:6px 4px 2px 43px;animation:fadeUp .4s ease both;}
+  .confirm-btn{
+    width:100%;background:var(--primary);color:#fff;border:none;border-radius:14px;
+    padding:14px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:var(--shadow);transition:.18s;
+  }
+  .confirm-btn:active{transform:scale(.98);}
+
+  /* 優先順位チップ */
+  .prio-wrap{display:flex;flex-wrap:wrap;gap:9px;padding:2px 4px 2px 43px;animation:fadeUp .4s ease both;}
+  .prio-chip{
+    background:var(--card);border:1.5px solid var(--line);border-radius:14px;
+    padding:11px 14px;font-size:14px;font-weight:600;color:var(--text);cursor:pointer;
+    display:flex;align-items:center;gap:8px;transition:.18s;box-shadow:0 1px 3px rgba(47,112,88,.06);
+  }
+  .prio-chip .ic{font-size:18px;}
+  .prio-chip:active{transform:scale(.97);}
+  .prio-chip.sel{border-color:var(--primary);background:var(--primary-soft);color:var(--primary-dark);}
+  .prio-chip .num{
+    width:20px;height:20px;border-radius:50%;background:var(--primary);color:#fff;
+    font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+
   /* 自由記述 */
   .free-input{
     padding:6px 4px 2px 43px;animation:fadeUp .4s ease both;
@@ -464,12 +494,45 @@ const FACILITIES = {
   ]
 };
 
+// はずせない条件（複数選択／足切り条件）
+const CONSTRAINTS = [
+  {key:"seikatsuhogo", ic:"🛟", label:"生活保護を受給している", sub:"生活保護に対応した施設を優先"},
+  {key:"medical",      ic:"🩺", label:"医療的ケアが欠かせない", sub:"痰の吸引・胃ろう・インスリンなど"},
+  {key:"urgent",       ic:"⏱️", label:"できるだけ早く入居したい", sub:"待機の少ない施設を優先"},
+  {key:"couple",       ic:"👫", label:"夫婦・ご家族と一緒に入りたい", sub:"二人入居に対応した施設"}
+];
+
+// 特に大事にしたいこと（優先順位トップ3）
+const PRIORITIES = [
+  {key:"cost",     ic:"💰", label:"費用の安さ"},
+  {key:"distance", ic:"🚃", label:"家・駅からの近さ"},
+  {key:"medical",  ic:"🩺", label:"医療体制の充実"},
+  {key:"dementia", ic:"🧠", label:"認知症ケアの専門性"},
+  {key:"active",   ic:"🎉", label:"にぎやかな交流・レク"},
+  {key:"calm",     ic:"🍵", label:"静かで落ち着いた環境"},
+  {key:"private",  ic:"🚪", label:"個室・プライバシー"}
+];
+
+// 優先項目ごとの種別スコア加点（タップ順の重み 3/2/1 を掛ける）
+const PRIORITY_BOOST = {
+  cost:     {tokuyo:3, carehouse:3, sakou:2, kaigotsuki:-3, jutaku:-1},
+  distance: {sakou:1, jutaku:1, kaigotsuki:1},
+  medical:  {kaigotsuki:3, roken:3, tokuyo:2, groupHome:-1},
+  dementia: {groupHome:4, kaigotsuki:2},
+  active:   {kaigotsuki:2, jutaku:2, sakou:2},
+  calm:     {groupHome:2, carehouse:2, tokuyo:1, roken:1},
+  private:  {kaigotsuki:2, jutaku:2, tokuyo:1}
+};
+
+const CONSTRAINT_LABELS = Object.fromEntries(CONSTRAINTS.map(o=>[o.key, o.label]));
+const PRIORITY_LABELS = Object.fromEntries(PRIORITIES.map(o=>[o.key, o.label]));
+
 /* ============================================================
    状態管理
    ============================================================ */
-const state = { area:null, care:null, dementia:null, budget:null, free:"", deepDive:[], chosenType:null, top3:[] };
+const state = { area:null, care:null, dementia:null, budget:null, constraints:[], priorities:[], free:"", deepDive:[], chosenType:null, top3:[] };
 let step = 0;
-const TOTAL_STEPS = 7; // ステップ1〜7を進捗に反映
+const TOTAL_STEPS = 8; // ステップ1〜8を進捗に反映
 
 const chat = document.getElementById('chat');
 const progressFill = document.getElementById('progressFill');
@@ -524,6 +587,8 @@ function profileText(){
     "・要介護度：" + (state.care || "未選択"),
     "・認知症の状況：" + (state.dementia || "未選択"),
     "・月額のご予算：" + (state.budget || "未選択"),
+    "・はずせない条件：" + (state.constraints.length ? state.constraints.map(k=>CONSTRAINT_LABELS[k]).join("、") : "特になし"),
+    "・特に大事にしたいこと（優先順）：" + (state.priorities.length ? state.priorities.map((k,i)=>(i+1)+". "+PRIORITY_LABELS[k]).join(" / ") : "特になし"),
     "・施設を探そうと思った理由／気がかりなこと：" + (state.free ? state.free : "（未記入）")
   ];
   if(state.deepDive && state.deepDive.length){
@@ -647,7 +712,7 @@ function start(){
 
 // ステップ1：地域
 function askArea(){
-  updateProgress(1, "ステップ1 / 7　地域");
+  updateProgress(1, "ステップ1 / 8　地域");
   botTyping(700, ()=>{
     botBubble("まず、施設をお探しの<b>地域</b>を教えてください。", {raw:true});
     showOptions([
@@ -660,7 +725,7 @@ function askArea(){
 
 // ステップ2：要介護度
 function askCare(){
-  updateProgress(2, "ステップ2 / 7　要介護度");
+  updateProgress(2, "ステップ2 / 8　要介護度");
   botSequence([
     {t:"ありがとうございます。次に、ご本人の<b>要介護度</b>を教えてください。", d:700},
     {t:"わからない場合は「まだ判定を受けていない」を選んでくださいね。", d:600}
@@ -677,7 +742,7 @@ function askCare(){
 
 // ステップ3：認知症
 function askDementia(){
-  updateProgress(3, "ステップ3 / 7　認知症");
+  updateProgress(3, "ステップ3 / 8　認知症");
   botTyping(700, ()=>{
     botBubble("<b>認知症</b>の症状について、いちばん近いものを教えてください。", {raw:true});
     showOptions([
@@ -690,7 +755,7 @@ function askDementia(){
 
 // ステップ4：予算
 function askBudget(){
-  updateProgress(4, "ステップ4 / 7　ご予算");
+  updateProgress(4, "ステップ4 / 8　ご予算");
   botSequence([
     {t:"無理のない範囲が大切です。ご希望の<b>月額予算</b>を教えてください。", d:700},
     {t:"家賃・食費・管理費などを含めたおおよその目安で大丈夫です。", d:600}
@@ -699,13 +764,106 @@ function askBudget(){
       {ic:"💰", label:"15万円以下", sub:"費用をおさえたい", value:"月額15万円以下"},
       {ic:"💴", label:"15万〜25万円", sub:"標準的な範囲で", value:"月額15〜25万円"},
       {ic:"✨", label:"25万円以上", sub:"手厚さ・環境を重視", value:"月額25万円以上"}
-    ], (o)=>{ state.budget = o.value; askFree(); });
+    ], (o)=>{ state.budget = o.value; askConstraints(); });
   });
 }
 
-// ステップ5：自由記述（→ AIによる深掘り対話へ）
+// ステップ5a：はずせない条件（複数選択／足切り）
+function askConstraints(){
+  updateProgress(5, "ステップ5 / 8　ご希望の条件");
+  botSequence([
+    {t:"ありがとうございます。ここからは、施設選びで<b>はずせない条件</b>と<b>大事にしたいこと</b>をうかがいます。", d:800},
+    {t:"まず、当てはまるものがあれば選んでください（複数選べます。なければそのまま「決定」でOKです）。", d:900}
+  ], ()=>{
+    showChecklist(CONSTRAINTS, (keys)=>{ state.constraints = keys; askPriorities(); });
+  });
+}
+
+// ステップ5b：大事にしたいことトップ3（タップ順＝優先度）
+function askPriorities(){
+  updateProgress(5, "ステップ5 / 8　ご希望の条件");
+  botTyping(700, ()=>{
+    botBubble("次に、施設選びで<b>特に大事にしたいこと</b>を、大事な順に最大3つ選んでください。タップした順番が優先順位になります🌿", {raw:true});
+    showPriorityPicker(PRIORITIES, 3, (keys)=>{ state.priorities = keys; askFree(); });
+  });
+}
+
+// 複数選択チェックリスト（決定ボタンで確定）
+function showChecklist(options, onConfirm){
+  const selected = new Set();
+  const wrap = document.createElement('div');
+  wrap.className = 'options';
+  options.forEach(o=>{
+    const b = document.createElement('button');
+    b.className = 'opt-btn';
+    b.innerHTML = `<span class="ic">${o.ic||""}</span><span>${o.label}${o.sub?`<span class="sub">${o.sub}</span>`:""}</span><span class="chk">✓</span>`;
+    b.onclick = ()=>{
+      if(selected.has(o.key)){ selected.delete(o.key); b.classList.remove('sel'); }
+      else { selected.add(o.key); b.classList.add('sel'); }
+    };
+    wrap.appendChild(b);
+  });
+  chat.appendChild(wrap);
+  const cr = document.createElement('div');
+  cr.className = 'confirm-row';
+  cr.innerHTML = `<button class="confirm-btn">これで決定</button>`;
+  chat.appendChild(cr); scrollDown();
+  cr.querySelector('.confirm-btn').onclick = ()=>{
+    const keys = options.map(o=>o.key).filter(k=>selected.has(k));
+    wrap.remove(); cr.remove();
+    const labels = keys.map(k=>options.find(o=>o.key===k).label);
+    userBubble(labels.length ? labels.join("、") : "特になし");
+    onConfirm(keys);
+  };
+}
+
+// 優先順位ピッカー（タップ順に番号付与、最大max個）
+function showPriorityPicker(options, max, onConfirm){
+  const order = [];
+  const chips = {};
+  const wrap = document.createElement('div');
+  wrap.className = 'prio-wrap';
+  options.forEach(o=>{
+    const c = document.createElement('button');
+    c.className = 'prio-chip';
+    c.innerHTML = `<span class="ic">${o.ic}</span><span>${o.label}</span>`;
+    c.onclick = ()=>{
+      const i = order.indexOf(o.key);
+      if(i>=0){ order.splice(i,1); }
+      else { if(order.length>=max) return; order.push(o.key); }
+      render();
+    };
+    chips[o.key] = c;
+    wrap.appendChild(c);
+  });
+  function render(){
+    options.forEach(o=>{
+      const c = chips[o.key];
+      const rank = order.indexOf(o.key);
+      c.classList.toggle('sel', rank>=0);
+      let num = c.querySelector('.num');
+      if(rank>=0){
+        if(!num){ num = document.createElement('span'); num.className='num'; c.insertBefore(num, c.firstChild); }
+        num.textContent = rank+1;
+      } else if(num){ num.remove(); }
+    });
+  }
+  chat.appendChild(wrap);
+  const cr = document.createElement('div');
+  cr.className = 'confirm-row';
+  cr.innerHTML = `<button class="confirm-btn">これで決定</button>`;
+  chat.appendChild(cr); scrollDown();
+  cr.querySelector('.confirm-btn').onclick = ()=>{
+    wrap.remove(); cr.remove();
+    const labels = order.map((k,i)=>`${i+1}. ${options.find(o=>o.key===k).label}`);
+    userBubble(labels.length ? labels.join("　") : "特にこだわりなし");
+    onConfirm(order.slice());
+  };
+}
+
+// ステップ6：自由記述（→ AIによる深掘り対話へ）
 function askFree(){
-  updateProgress(5, "ステップ5 / 7　気がかりなこと");
+  updateProgress(6, "ステップ6 / 8　気がかりなこと");
   botSequence([
     {t:"ここまでありがとうございます。最後に、いちばん大切なことをお聞きします。", d:700},
     {t:"今、施設を探そうと思った<b>理由</b>や、ご本人・ご家族で<b>気がかりなこと</b>を、どんなことでも教えてください。文章でかまいません🌿", d:1000}
@@ -749,7 +907,7 @@ ${profileText()}
 }
 
 async function startDeepDive(){
-  updateProgress(5, "ステップ5 / 7　気がかりなこと");
+  updateProgress(6, "ステップ6 / 8　気がかりなこと");
 
   // APIキー未設定：従来どおり1往復で次へ
   if(!aiEnabled()){
@@ -842,6 +1000,11 @@ function rankTypes(){
       score.kaigotsuki+=4; score.jutaku+=2; score.groupHome+=1; break;
   }
 
+  // はずせない条件（足切り・強い重みづけ）
+  applyConstraints(score);
+  // 大事にしたいことトップ3（タップ順の重み 3/2/1）
+  applyPriorities(score);
+
   const order = Object.keys(CARE_TYPES);
   let ranked = order.map(k=>({key:k, s:score[k]})).sort((a,b)=> b.s - a.s || order.indexOf(a.key)-order.indexOf(b.key));
 
@@ -849,11 +1012,50 @@ function rankTypes(){
   const hasDementia = state.dementia === "認知症（軽度）" || state.dementia === "認知症（中度以上）";
   if(hasDementia){
     ranked = ranked.filter(r=>r.key!=="groupHome");
-    const pos = (state.dementia === "認知症（中度以上）") ? 0 : Math.min(1, ranked.length);
+    // 中度以上は上位、軽度は2番手付近。ただし医療的ケア必須なら一段下げる
+    // （それでも必ずトップ3内に含める＝専門性を示す）
+    let pos = (state.dementia === "認知症（中度以上）") ? 0 : 1;
+    if(state.constraints.includes("medical")) pos += 1;
+    pos = Math.min(pos, 2);
     ranked.splice(pos, 0, {key:"groupHome", s:score.groupHome});
   }
 
   return ranked.slice(0,3).map(r=>r.key);
+}
+
+// はずせない条件をスコアに反映
+function applyConstraints(score){
+  const c = state.constraints || [];
+  if(c.includes("seikatsuhogo")){ // 生活保護：公的・低費用を強く優先、高額民間を抑制
+    score.tokuyo+=4; score.carehouse+=4; score.sakou+=1; score.kaigotsuki-=6; score.jutaku-=2;
+  }
+  if(c.includes("medical")){ // 医療的ケア必須：医療に強い種別を優先、弱い種別を抑制
+    score.kaigotsuki+=5; score.roken+=4; score.tokuyo+=3;
+    score.groupHome-=4; score.sakou-=3; score.carehouse-=3; score.jutaku-=2;
+  }
+  if(c.includes("urgent")){ // 早期入居：待機の出やすい特養を抑制、入りやすい種別を優先
+    score.jutaku+=2; score.sakou+=2; score.kaigotsuki+=2; score.tokuyo-=3;
+  }
+  if(c.includes("couple")){ // 夫婦・二人入居：二人入居しやすい種別を優先
+    score.jutaku+=3; score.sakou+=3; score.kaigotsuki+=2; score.groupHome-=3; score.tokuyo-=2;
+  }
+}
+
+// 優先順位（タップ順の重み 3/2/1）をスコアに反映
+function applyPriorities(score){
+  (state.priorities || []).forEach((key, idx)=>{
+    const weight = 3 - idx; // 1位=3, 2位=2, 3位=1
+    const boosts = PRIORITY_BOOST[key] || {};
+    for(const t in boosts){ score[t] += boosts[t] * weight; }
+  });
+}
+
+// 固定理由（AI未使用時）に、最優先項目を一言そえる
+function priorityNote(){
+  if(!state.priorities || !state.priorities.length) return "";
+  const map = {cost:"費用面", distance:"通いやすさ", medical:"医療体制", dementia:"認知症ケア", active:"交流・レク", calm:"落ち着いた環境", private:"プライバシー"};
+  const top = map[state.priorities[0]];
+  return top ? `特に「${top}」を大切にされたい点も考慮しました。` : "";
 }
 
 // 固定の「おすすめ理由」（AI未使用時のフォールバック）
@@ -928,7 +1130,7 @@ async function generateTypeReasons(keys){
 }
 
 function proposeTypes(){
-  updateProgress(6, "ステップ6 / 7　合う種別");
+  updateProgress(7, "ステップ7 / 8　合う種別");
   const top3 = rankTypes();
   state.top3 = top3;
 
@@ -959,7 +1161,8 @@ function renderTypeCards(keys, reasons){
   wrap.className = 'type-cards';
   keys.forEach((k,i)=>{
     const t = CARE_TYPES[k];
-    const reasonText = (reasons && reasons[k]) ? reasons[k] : reasonFor(k);
+    const fixedReason = (reasonFor(k) + (priorityNote() ? " " + priorityNote() : "")).trim();
+    const reasonText = (reasons && reasons[k]) ? reasons[k] : fixedReason;
     const aiTag = (reasons && reasons[k]) ? `<span class="ai-tag">✨ AIがあなた向けに生成</span> ` : "";
     const card = document.createElement('div');
     card.className = 'type-card';
@@ -1047,7 +1250,7 @@ async function generateFacilityReasons(key){
 }
 
 function proposeFacilities(key){
-  updateProgress(7, "ステップ7 / 7　おすすめ施設");
+  updateProgress(8, "ステップ8 / 8　おすすめ施設");
   const t = CARE_TYPES[key];
   botSequence([
     {t:`「${t.name}」ですね。承知しました。`, d:700},
@@ -1115,7 +1318,7 @@ function showCTA(){
   chat.appendChild(r);
   r.querySelector('#restartBtn').onclick = ()=>{
     chat.innerHTML = '';
-    Object.assign(state,{area:null,care:null,dementia:null,budget:null,free:"",deepDive:[],chosenType:null,top3:[]});
+    Object.assign(state,{area:null,care:null,dementia:null,budget:null,constraints:[],priorities:[],free:"",deepDive:[],chosenType:null,top3:[]});
     start();
   };
   scrollDown();
