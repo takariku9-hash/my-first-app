@@ -562,13 +562,25 @@ const PRIORITY_BOOST = {
   private:  {kaigotsuki:2, jutaku:2, tokuyo:1}
 };
 
+// 施設を考え始めたきっかけ（複数選択／リードの背景把握）
+const TRIGGERS = [
+  {key:"discharge", ic:"🏥", label:"入院・退院が決まっている", sub:"退院後の行き先が必要"},
+  {key:"burden",    ic:"😣", label:"在宅介護の負担が大きい", sub:"家族が支えきれない"},
+  {key:"alone",     ic:"🏠", label:"一人暮らしが不安", sub:"転倒・火の元・服薬など"},
+  {key:"dementia",  ic:"🧠", label:"認知症の症状が進んできた", sub:""},
+  {key:"caregiver", ic:"👤", label:"介護していた家族が続けられない", sub:"病気・仕事・高齢化など"},
+  {key:"quality",   ic:"🌱", label:"より良い環境で暮らしたい", sub:"本人・家族の希望"},
+  {key:"thinking",  ic:"💭", label:"まだ迷っている・相談したい", sub:""}
+];
+
 const CONSTRAINT_LABELS = Object.fromEntries(CONSTRAINTS.map(o=>[o.key, o.label]));
 const PRIORITY_LABELS = Object.fromEntries(PRIORITIES.map(o=>[o.key, o.label]));
+const TRIGGER_LABELS = Object.fromEntries(TRIGGERS.map(o=>[o.key, o.label]));
 
 /* ============================================================
    状態管理
    ============================================================ */
-const state = { area:null, care:null, dementia:null, budget:null, constraints:[], priorities:[], free:"", deepDive:[], assessed:false, chosenType:null, top3:[] };
+const state = { area:null, care:null, dementia:null, budget:null, constraints:[], priorities:[], free:"", deepDive:[], timing:null, triggers:[], timingDone:false, chosenType:null, top3:[] };
 let step = 0;
 const TOTAL_STEPS = 8; // ステップ1〜8を進捗に反映
 
@@ -627,6 +639,8 @@ function profileText(){
     "・月額のご予算：" + (state.budget || "未選択"),
     "・はずせない条件：" + (state.constraints.length ? state.constraints.map(k=>CONSTRAINT_LABELS[k]).join("、") : "特になし"),
     "・特に大事にしたいこと（優先順）：" + (state.priorities.length ? state.priorities.map((k,i)=>(i+1)+". "+PRIORITY_LABELS[k]).join(" / ") : "特になし"),
+    "・入居をお考えの時期：" + (state.timing || "未選択"),
+    "・検討のきっかけ：" + (state.triggers.length ? state.triggers.map(k=>TRIGGER_LABELS[k]).join("、") : "未選択"),
     "・施設を探そうと思った理由／気がかりなこと：" + (state.free ? state.free : "（未記入）")
   ];
   if(state.deepDive && state.deepDive.length){
@@ -1181,139 +1195,57 @@ async function generateTypeReasons(keys){
 }
 
 /* ============================================================
-   見立て：今、施設入居が必要か（在宅サービスで支えられるか）
+   入居をお考えの時期・きっかけ（リードの温度感を把握）
+   ※ 外部窓口へ誘導せず、自社の相談員につなぐ前提で温度感を聞く
    ============================================================ */
-// ルールベースの緊急度スコア
-function needScore(){
-  let s = 0;
-  s += ({"自立":0,"要支援1〜2":1,"要介護1〜2":2,"要介護3〜5":4,"未判定":1})[state.care] || 0;
-  s += ({"認知症なし":0,"認知症（軽度）":1,"認知症（中度以上）":3})[state.dementia] || 0;
-  if(state.constraints.includes("medical")) s += 2;
-  if(state.constraints.includes("urgent")) s += 3;
-  return s;
-}
-function bandFromScore(s){
-  if(s <= 2) return "home";
-  if(s <= 5) return "consider";
-  return "facility";
-}
-// 各バンドの固定文（AI未使用時）
-const ASSESS_CONTENT = {
-  home: {
-    icon:"🏠",
-    label:"今のご状況の見立て",
-    title:"在宅での生活を、介護サービスで支える方法も十分に考えられます",
-    body:"現時点では、ご自宅で暮らしながら介護サービスを組み合わせる選択肢が現実的です。あせって施設を決めなくても、まずは負担を減らす手立てから始められます。",
-    alts:["訪問介護（ホームヘルプ）で生活をサポート","デイサービス（通所介護）で日中の見守りと外出機会を","ショートステイ（短期入所）で介護する側の休息を","まずは地域包括支援センター／ケアマネジャーに相談"]
-  },
-  consider: {
-    icon:"🧭",
-    label:"今のご状況の見立て",
-    title:"在宅で支えつつ、施設も視野に入れて準備を始める時期です",
-    body:"今は在宅サービスで支えられても、状況は少しずつ変わっていきます。並行して施設の情報を集め、見学や空き状況を把握しておくと、いざという時に落ち着いて選べます。",
-    alts:["在宅サービスを強化しながら様子をみる","気になる施設の事前見学・資料請求をしておく","小規模多機能型居宅介護（通い・訪問・泊まりを一体的に）も検討"]
-  },
-  facility: {
-    icon:"🤝",
-    label:"今のご状況の見立て",
-    title:"専門的なケアのある施設への入居を、前向きに検討する時期です",
-    body:"介護の負担や安全面を考えると、専門職が常駐する施設での暮らしが、ご本人にもご家族にも安心につながりそうです。ご自身を責めず、専門家に頼ることも大切な選択です。",
-    alts:[]
-  }
-};
-const ASSESS_DISCLAIMER = "これはご回答からのおおよその目安です。最終的な判断は、担当のケアマネジャーやお住まいの地域包括支援センターにご相談ください。";
-
-// AIで見立てを生成（失敗時 null）
-const ASSESS_SCHEMA = {
-  type: "object",
-  properties: {
-    band: { type: "string", enum: ["home","consider","facility"] },
-    message: { type: "string" },
-    alternatives: { type: "array", items: { type: "string" } }
-  },
-  required: ["band","message","alternatives"],
-  additionalProperties: false
-};
-async function generateAssessment(){
-  if(!aiEnabled()) return null;
-  const system = PERSONA + `
-
-【タスク】
-ご家族の状況から、今すぐ施設入居が必要な段階か、在宅サービスで支えられる段階かを見立ててください。
-- band は3段階で判定：
-  home = 在宅+介護サービスで支えられそう、consider = 施設も視野に準備する時期、facility = 施設入居を前向きに進めるのがよい
-- message は2〜4文。要介護度・認知症・医療や緊急度の条件、そして自由記述や深掘り対話で語られた家族の負担・本人の希望に具体的に触れ、決めつけず、責めず、寄り添う言葉で。
-- alternatives：band が home/consider なら、在宅で使える介護サービスや相談先を2〜4個（訪問介護・デイ・ショートステイ・小規模多機能・地域包括支援センター等から状況に合うもの）。facility のときは入居に向けた準備ステップを1〜3個、または空配列。
-- 医療や専門職への相談を否定せず促す姿勢で。出力は必ず指定のJSON形式。`;
-  const txt = await claudeMessages({
-    system,
-    messages: [{ role:"user", content: "■ご家族の状況\n" + profileText() }],
-    maxTokens: 900,
-    schema: ASSESS_SCHEMA
-  });
-  return JSON.parse(txt);
-}
-
-function assessNeed(){
-  updateProgress(7, "ステップ7 / 8　今の見立て");
+function askTiming(){
+  updateProgress(7, "ステップ7 / 8　入居の時期");
   botSequence([
-    {t:"ご回答ありがとうございます。施設のご提案の前に、<b>今のご状況についての見立て</b>を一度お伝えしますね。", d:900}
-  ], async ()=>{
-    let band, message, alts;
-    if(aiEnabled()){
-      const typing = startTyping();
-      try{
-        const a = await generateAssessment();
-        band = a.band; message = a.message; alts = a.alternatives || [];
-      }catch(e){
-        notifyAiError(e);
-        band = bandFromScore(needScore());
-        message = ASSESS_CONTENT[band].body; alts = ASSESS_CONTENT[band].alts;
-      }
-      typing.remove();
-      renderAssessment(band, message, alts, aiEnabled());
-    } else {
-      band = bandFromScore(needScore());
-      const c = ASSESS_CONTENT[band];
-      botTyping(900, ()=> renderAssessment(band, c.body, c.alts, false));
-    }
+    {t:"ありがとうございます。施設のご提案の前に、<b>入居をお考えの時期</b>を教えてください。お急ぎ度に合わせてご案内します🌿", d:900}
+  ], ()=>{
+    showOptions([
+      {ic:"🚨", label:"今すぐ〜1ヶ月以内", sub:"急いで探したい", value:"今すぐ〜1ヶ月以内"},
+      {ic:"📅", label:"1〜3ヶ月以内", sub:"なるべく早めに", value:"1〜3ヶ月以内"},
+      {ic:"🗓️", label:"半年以内", sub:"少し先を見据えて", value:"半年以内"},
+      {ic:"🔎", label:"まだ具体的には未定", sub:"情報を集めている段階", value:"まだ未定（情報収集中）"}
+    ], (o)=>{ state.timing = o.value; askTrigger(); });
   });
 }
 
-function renderAssessment(band, message, alts, ai){
-  const c = ASSESS_CONTENT[band] || ASSESS_CONTENT.consider;
-  const card = document.createElement('div');
-  card.className = 'assess-card ' + band;
-  const altsHtml = (alts && alts.length) ? `
-    <div class="as-alts">
-      <span class="al-lbl">${band==='facility' ? '🔎 入居に向けてできること' : '🏡 まず使える選択肢・相談先'}</span>
-      <ul>${alts.map(a=>`<li>${escapeHtml(a)}</li>`).join("")}</ul>
-    </div>` : "";
-  const aiTag = ai ? `<span class="ai-tag">✨ AI相談員の見立て</span>` : "";
-  card.innerHTML = `
-    <div class="as-head">
-      <div class="as-badge">${c.icon} ${c.label}</div>
-      <div class="as-title">${escapeHtml(c.title)}</div>
-    </div>
-    <div class="as-body">
-      ${aiTag ? `<p style="margin-bottom:8px;">${aiTag}</p>` : ""}
-      <p>${escapeHtml(message)}</p>
-      ${altsHtml}
-      <p class="as-note">⚠️ ${ASSESS_DISCLAIMER}</p>
-    </div>
-    <button class="as-next">${band==='facility' ? '合う施設の種別を見る ▶' : 'それでも施設の種別提案を見てみる ▶'}</button>`;
-  card.querySelector('.as-next').onclick = ()=>{
-    card.querySelector('.as-next').disabled = true;
-    state.assessed = true;
-    userBubble("施設の種別提案を見たいです");
-    proposeTypes();
-  };
-  chat.appendChild(card); scrollDown();
+function askTrigger(){
+  updateProgress(7, "ステップ7 / 8　検討のきっかけ");
+  botSequence([
+    {t:"今回、施設を考え始めた<b>きっかけ</b>として近いものを選んでください（複数選べます）。", d:800}
+  ], ()=>{
+    showChecklist(TRIGGERS, (keys)=>{ state.triggers = keys; afterTiming(); });
+  });
 }
+
+// 時期に合わせた、自社相談員につなぐひと言（外部誘導はしない）
+function timingMessage(){
+  switch(state.timing){
+    case "今すぐ〜1ヶ月以内":
+      return "お急ぎなのですね。今すぐ入居しやすい施設を優先して、相談員がスピーディにお探しします。まずは合う種別から見ていきましょう。";
+    case "1〜3ヶ月以内":
+      return "なるべく早めに、ですね。ご条件に合う施設を絞ってご提案し、気になる施設は見学のご予約までお手伝いします。";
+    case "半年以内":
+      return "少し先を見据えての検討、よいタイミングです。今のうちに候補と空き状況を把握しておくと安心ですよ。一緒に見ていきましょう。";
+    default:
+      return "今は無理に決めなくて大丈夫です。どんな選択肢があるか、相談員が一緒に整理します。気になる施設だけ資料や見学のお手伝いもできますので、まずは候補をのぞいてみましょう。";
+  }
+}
+
+function afterTiming(){
+  botSequence([{ t: timingMessage(), d: 900 }], ()=>{
+    state.timingDone = true;
+    proposeTypes();
+  });
+}
+
 
 function proposeTypes(){
-  // 先に「今、施設入居が必要か」の見立てを挟む（種別提案はその後）
-  if(!state.assessed){ assessNeed(); return; }
+  // 先に「入居の時期・きっかけ」を聞いてから種別提案へ
+  if(!state.timingDone){ askTiming(); return; }
   updateProgress(7, "ステップ7 / 8　合う種別");
   const top3 = rankTypes();
   state.top3 = top3;
@@ -1483,13 +1415,22 @@ function renderFacilityCards(key, reasons){
 }
 
 function showCTA(){
+  const urgent = state.timing === "今すぐ〜1ヶ月以内";
+  const soon = state.timing === "1〜3ヶ月以内";
+  const ctaTitle = urgent ? "お急ぎの方こそ、まず相談員へ（無料）"
+                 : (state.timing === "まだ未定（情報収集中）") ? "情報集めの段階でも、気軽に相談員へ（無料）"
+                 : "気になる施設を相談員に無料相談";
+  const ctaDesc = urgent ? "お急ぎとのこと、空室のある施設をすぐにお調べし、最短での見学・入居までスピーディにお手伝いします。"
+                 : soon ? "ご希望の時期に間に合うよう、空室確認から見学予約まで相談員が伴走します。"
+                 : (state.timing === "まだ未定（情報収集中）") ? "今すぐ決めなくてOK。資料請求や見学だけでも、相談員が無料でお手伝いします。"
+                 : "これまでのご回答を引き継いで、ぴったりの施設えらびをお手伝いします。しつこい勧誘はありません。";
   botBubble("気になる施設は見つかりましたか？　ここから先は、空室確認・費用の詳細・見学予約まで、<b>専門の相談員が無料で</b>サポートします。", {raw:true});
   const box = document.createElement('div');
   box.className = 'cta-box';
   box.innerHTML = `
     <div class="cta-icon">🤝</div>
-    <div class="cta-title">気になる施設を相談員に無料相談</div>
-    <div class="cta-desc">これまでのご回答を引き継いで、ぴったりの施設えらびをお手伝いします。しつこい勧誘はありません。</div>
+    <div class="cta-title">${escapeHtml(ctaTitle)}</div>
+    <div class="cta-desc">${escapeHtml(ctaDesc)}</div>
     <button class="cta-btn" id="ctaBtn">無料で相談員に相談する</button>
     <div class="cta-note">通話・相談はすべて無料です</div>`;
   chat.appendChild(box);
@@ -1502,7 +1443,7 @@ function showCTA(){
   chat.appendChild(r);
   r.querySelector('#restartBtn').onclick = ()=>{
     chat.innerHTML = '';
-    Object.assign(state,{area:null,care:null,dementia:null,budget:null,constraints:[],priorities:[],free:"",deepDive:[],assessed:false,chosenType:null,top3:[]});
+    Object.assign(state,{area:null,care:null,dementia:null,budget:null,constraints:[],priorities:[],free:"",deepDive:[],timing:null,triggers:[],timingDone:false,chosenType:null,top3:[]});
     start();
   };
   scrollDown();
