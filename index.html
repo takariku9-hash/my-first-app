@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>かいごの相談チャット｜施設さがしをやさしくサポート</title>
+<style>
+  :root{
+    --bg:#f3f7f4;
+    --card:#ffffff;
+    --primary:#3f8f6e;      /* やわらかいグリーン */
+    --primary-dark:#2f7058;
+    --primary-soft:#e7f3ed;
+    --accent:#e8915b;       /* あたたかいオレンジ（相談員アクセント） */
+    --text:#2f3a36;
+    --text-sub:#69756f;
+    --line:#e2ebe6;
+    --bubble-bot:#ffffff;
+    --bubble-user:#dff0e7;
+    --shadow:0 2px 10px rgba(47,112,88,.10);
+    --warn:#c2683f;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic",Meiryo,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{
+    max-width:480px;
+    margin:0 auto;
+    min-height:100vh;
+    min-height:100dvh;
+    display:flex;
+    flex-direction:column;
+    background:var(--bg);
+    position:relative;
+  }
+
+  /* ヘッダー */
+  .header{
+    position:sticky;top:0;z-index:20;
+    background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+    color:#fff;
+    padding:14px 18px;
+    display:flex;align-items:center;gap:12px;
+    box-shadow:0 2px 12px rgba(47,112,88,.25);
+  }
+  .header .avatar{
+    width:42px;height:42px;border-radius:50%;
+    background:#fff;color:var(--primary);
+    display:flex;align-items:center;justify-content:center;
+    font-size:22px;flex-shrink:0;box-shadow:0 1px 4px rgba(0,0,0,.12);
+  }
+  .header .title{font-size:16px;font-weight:700;letter-spacing:.02em;}
+  .header .sub{font-size:11.5px;opacity:.92;font-weight:400;margin-top:1px;}
+  .header .ai-status{
+    margin-left:auto;font-size:11px;display:flex;align-items:center;gap:5px;
+    background:rgba(255,255,255,.16);border:none;color:#fff;
+    padding:7px 11px;border-radius:99px;cursor:pointer;transition:.18s;
+  }
+  .header .ai-status:active{transform:scale(.96);}
+  .header .ai-status .dot{width:8px;height:8px;border-radius:50%;background:#9ff0c4;box-shadow:0 0 0 3px rgba(159,240,196,.3);}
+  .header .ai-status.off .dot{background:#d7dedb;box-shadow:none;}
+
+  /* 進捗バー */
+  .progress-wrap{padding:10px 18px 4px;background:var(--bg);position:sticky;top:70px;z-index:15;}
+  .progress-track{height:6px;background:var(--line);border-radius:99px;overflow:hidden;}
+  .progress-fill{height:100%;width:0;background:linear-gradient(90deg,var(--primary),#5fb389);border-radius:99px;transition:width .5s cubic-bezier(.4,0,.2,1);}
+  .progress-label{font-size:11px;color:var(--text-sub);margin-top:5px;text-align:right;}
+
+  /* チャット領域 */
+  .chat{
+    flex:1;
+    padding:14px 14px 24px;
+    overflow-y:auto;
+    display:flex;flex-direction:column;gap:14px;
+  }
+
+  .row{display:flex;gap:9px;align-items:flex-end;animation:fadeUp .4s ease both;}
+  .row.bot{justify-content:flex-start;}
+  .row.user{justify-content:flex-end;}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+  .mini-avatar{
+    width:34px;height:34px;border-radius:50%;flex-shrink:0;
+    background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+    color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;
+    box-shadow:var(--shadow);
+  }
+  .bubble{
+    max-width:78%;
+    padding:11px 15px;
+    border-radius:18px;
+    font-size:14.5px;
+    box-shadow:var(--shadow);
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+  .bot .bubble{
+    background:var(--bubble-bot);
+    border-top-left-radius:5px;
+    color:var(--text);
+  }
+  .user .bubble{
+    background:var(--bubble-user);
+    border-top-right-radius:5px;
+    color:var(--primary-dark);
+    font-weight:600;
+  }
+  .bubble .ai-tag{
+    display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;
+    color:var(--primary);background:var(--primary-soft);
+    padding:1px 7px;border-radius:99px;margin-bottom:6px;
+  }
+
+  /* タイピングインジケータ */
+  .typing{display:flex;gap:4px;padding:14px 16px;}
+  .typing span{width:8px;height:8px;border-radius:50%;background:#bcd3c8;animation:blink 1.2s infinite;}
+  .typing span:nth-child(2){animation-delay:.2s;}
+  .typing span:nth-child(3){animation-delay:.4s;}
+  @keyframes blink{0%,60%,100%{opacity:.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-3px);}}
+
+  /* 選択肢ボタン群 */
+  .options{
+    display:flex;flex-direction:column;gap:9px;
+    padding:2px 4px 2px 43px;
+    animation:fadeUp .4s ease both;
+  }
+  .opt-btn{
+    background:var(--card);
+    border:1.5px solid var(--line);
+    border-radius:14px;
+    padding:14px 16px;
+    font-size:15px;font-weight:600;
+    color:var(--text);
+    text-align:left;
+    cursor:pointer;
+    transition:.18s;
+    box-shadow:0 1px 3px rgba(47,112,88,.06);
+    display:flex;align-items:center;gap:10px;
+    line-height:1.4;
+  }
+  .opt-btn .ic{font-size:20px;flex-shrink:0;}
+  .opt-btn .sub{font-size:12px;font-weight:400;color:var(--text-sub);display:block;margin-top:2px;}
+  .opt-btn:active{transform:scale(.98);}
+  .opt-btn:hover{border-color:var(--primary);background:var(--primary-soft);}
+
+  /* 複数選択（チェック式） */
+  .opt-btn.sel{border-color:var(--primary);background:var(--primary-soft);}
+  .opt-btn .chk{
+    margin-left:auto;width:22px;height:22px;border-radius:50%;
+    border:2px solid var(--line);display:flex;align-items:center;justify-content:center;
+    font-size:13px;color:transparent;flex-shrink:0;transition:.15s;
+  }
+  .opt-btn.sel .chk{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .confirm-row{padding:6px 4px 2px 43px;animation:fadeUp .4s ease both;}
+  .confirm-btn{
+    width:100%;background:var(--primary);color:#fff;border:none;border-radius:14px;
+    padding:14px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:var(--shadow);transition:.18s;
+  }
+  .confirm-btn:active{transform:scale(.98);}
+
+  /* 地域（市区町村）チップ */
+  .ward-grid{display:flex;flex-wrap:wrap;gap:8px;padding:2px 4px 2px 43px;animation:fadeUp .4s ease both;}
+  .ward-chip{
+    background:var(--card);border:1.5px solid var(--line);border-radius:12px;
+    padding:10px 13px;font-size:13.5px;font-weight:600;color:var(--text);cursor:pointer;transition:.18s;
+    box-shadow:0 1px 3px rgba(47,112,88,.06);
+  }
+  .ward-chip:active{transform:scale(.96);}
+  .ward-chip:hover{border-color:var(--primary);background:var(--primary-soft);}
+
+  /* 見立て（入居が必要かのアドバイス）カード */
+  .assess-card{
+    background:var(--card);border-radius:16px;overflow:hidden;
+    box-shadow:var(--shadow);border:1.5px solid var(--line);
+    margin:2px 2px 2px 43px;animation:fadeUp .4s ease both;
+  }
+  .assess-card .as-head{padding:14px 16px 12px;color:#fff;}
+  .assess-card.home .as-head{background:linear-gradient(135deg,#3f8f6e,#2f7058);}
+  .assess-card.consider .as-head{background:linear-gradient(135deg,#e0a23b,#cf8c25);}
+  .assess-card.facility .as-head{background:linear-gradient(135deg,#e8915b,#dd7e44);}
+  .assess-card .as-badge{font-size:11.5px;font-weight:700;opacity:.95;display:flex;align-items:center;gap:5px;}
+  .assess-card .as-title{font-size:15.5px;font-weight:800;margin-top:4px;line-height:1.45;}
+  .assess-card .as-body{padding:13px 16px;}
+  .assess-card .as-body p{margin:0 0 10px;font-size:14px;color:var(--text);}
+  .assess-card .as-alts{background:var(--primary-soft);border-radius:12px;padding:11px 13px;}
+  .assess-card .as-alts .al-lbl{font-size:12px;font-weight:700;color:var(--primary-dark);margin-bottom:6px;display:block;}
+  .assess-card .as-alts ul{margin:0;padding-left:18px;}
+  .assess-card .as-alts li{font-size:13px;color:var(--text);margin-bottom:3px;}
+  .assess-card .as-note{font-size:11px;color:var(--text-sub);margin:10px 0 0;line-height:1.5;}
+  .assess-card .as-next{
+    width:100%;border:none;border-top:1px solid var(--line);background:#fff;color:var(--primary);
+    font-weight:800;font-size:14.5px;padding:13px;cursor:pointer;transition:.18s;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+  }
+  .assess-card .as-next:hover{background:var(--primary-soft);}
+  .assess-card .as-next:active{background:var(--primary);color:#fff;}
+
+  /* 優先順位チップ */
+  .prio-wrap{display:flex;flex-wrap:wrap;gap:9px;padding:2px 4px 2px 43px;animation:fadeUp .4s ease both;}
+  .prio-chip{
+    background:var(--card);border:1.5px solid var(--line);border-radius:14px;
+    padding:11px 14px;font-size:14px;font-weight:600;color:var(--text);cursor:pointer;
+    display:flex;align-items:center;gap:8px;transition:.18s;box-shadow:0 1px 3px rgba(47,112,88,.06);
+  }
+  .prio-chip .ic{font-size:18px;}
+  .prio-chip:active{transform:scale(.97);}
+  .prio-chip.sel{border-color:var(--primary);background:var(--primary-soft);color:var(--primary-dark);}
+  .prio-chip .num{
+    width:20px;height:20px;border-radius:50%;background:var(--primary);color:#fff;
+    font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+
+  /* 自由記述 */
+  .free-input{
+    padding:6px 4px 2px 43px;animation:fadeUp .4s ease both;
+  }
+  .free-input textarea{
+    width:100%;border:1.5px solid var(--line);border-radius:14px;
+    padding:13px 15px;font-size:15px;font-family:inherit;
+    resize:none;min-height:96px;color:var(--text);background:var(--card);
+    box-shadow:0 1px 3px rgba(47,112,88,.06);
+  }
+  .free-input textarea:focus{outline:none;border-color:var(--primary);background:#fbfdfc;}
+  .free-input .hint{font-size:11.5px;color:var(--text-sub);margin:6px 2px;}
+  .send-row{display:flex;gap:8px;margin-top:8px;}
+  .send-btn{
+    flex:1;background:var(--primary);color:#fff;border:none;border-radius:14px;
+    padding:13px;font-size:15px;font-weight:700;cursor:pointer;transition:.18s;
+    box-shadow:var(--shadow);
+  }
+  .send-btn:active{transform:scale(.98);}
+  .send-btn:disabled{opacity:.5;}
+  .skip-btn{
+    background:transparent;color:var(--text-sub);border:1.5px solid var(--line);
+    border-radius:14px;padding:13px 18px;font-size:13.5px;cursor:pointer;
+  }
+
+  /* 種別提案カード */
+  .type-cards{display:flex;flex-direction:column;gap:12px;padding:2px 2px 2px 43px;animation:fadeUp .4s ease both;}
+  .type-card{
+    background:var(--card);border-radius:16px;overflow:hidden;
+    box-shadow:var(--shadow);border:1.5px solid var(--line);
+  }
+  .type-card .tc-head{
+    padding:13px 15px 11px;display:flex;align-items:flex-start;gap:10px;
+    background:linear-gradient(135deg,var(--primary-soft),#f3faf6);
+    border-bottom:1px solid var(--line);
+  }
+  .rank-badge{
+    flex-shrink:0;width:30px;height:30px;border-radius:9px;
+    background:var(--primary);color:#fff;font-weight:800;font-size:14px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .rank-badge.r1{background:linear-gradient(135deg,#e8a93b,#d8902a);}
+  .rank-badge.r2{background:linear-gradient(135deg,#9aa7ad,#7d8a90);}
+  .rank-badge.r3{background:linear-gradient(135deg,#c79a6b,#b07f4f);}
+  .tc-head .tc-name{font-size:16px;font-weight:800;color:var(--primary-dark);}
+  .tc-head .tc-tag{font-size:11.5px;color:var(--text-sub);margin-top:1px;}
+  .tc-body{padding:13px 15px;}
+  .tc-section{margin-bottom:10px;}
+  .tc-section:last-child{margin-bottom:0;}
+  .tc-section .lbl{font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;margin-bottom:3px;}
+  .lbl.reason{color:var(--primary-dark);}
+  .lbl.merit{color:#2f8f5b;}
+  .lbl.demerit{color:var(--warn);}
+  .tc-section p{margin:0;font-size:13.5px;color:var(--text);}
+  .tc-reason-box{
+    background:var(--primary-soft);border-radius:10px;padding:9px 11px;
+  }
+  .tc-select{
+    width:100%;border:none;border-top:1px solid var(--line);
+    background:#fff;color:var(--primary);font-weight:800;font-size:14.5px;
+    padding:13px;cursor:pointer;transition:.18s;display:flex;align-items:center;justify-content:center;gap:6px;
+  }
+  .tc-select:hover{background:var(--primary-soft);}
+  .tc-select:active{background:var(--primary);color:#fff;}
+
+  /* 施設カード */
+  .facility-cards{display:flex;flex-direction:column;gap:11px;padding:2px 2px 2px 43px;animation:fadeUp .4s ease both;}
+  .fac-card{
+    background:var(--card);border-radius:15px;padding:13px 15px;
+    box-shadow:var(--shadow);border:1.5px solid var(--line);
+    position:relative;
+  }
+  .fac-rank{
+    position:absolute;top:-7px;left:-7px;width:26px;height:26px;border-radius:50%;
+    background:var(--primary);color:#fff;font-weight:800;font-size:12px;
+    display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);
+  }
+  .fac-name{font-size:15.5px;font-weight:800;color:var(--text);margin-bottom:6px;line-height:1.35;}
+  .fac-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px;}
+  .chip{font-size:11.5px;padding:3px 9px;border-radius:99px;background:var(--primary-soft);color:var(--primary-dark);font-weight:600;}
+  .chip.price{background:#fdf0e6;color:var(--accent);}
+  .chip.room{background:#eaf4fb;color:#3b7fb0;}
+  .chip.room.few{background:#fdeaea;color:#c2683f;}
+  .fac-reason{font-size:13px;color:var(--text-sub);display:flex;gap:6px;align-items:flex-start;}
+  .fac-reason .q{color:var(--primary);font-weight:800;flex-shrink:0;}
+
+  /* CTA 相談員 */
+  .cta-box{
+    margin:4px 2px 2px 43px;
+    background:linear-gradient(135deg,#fff6ef,#fdeee3);
+    border:1.5px solid #f3d9c4;border-radius:16px;padding:16px;
+    text-align:center;animation:fadeUp .4s ease both;box-shadow:var(--shadow);
+  }
+  .cta-box .cta-icon{font-size:30px;}
+  .cta-box .cta-title{font-size:15px;font-weight:800;color:var(--accent);margin:4px 0 3px;}
+  .cta-box .cta-desc{font-size:12.5px;color:var(--text-sub);margin-bottom:13px;}
+  .cta-btn{
+    width:100%;background:linear-gradient(135deg,var(--accent),#dd7e44);color:#fff;border:none;
+    border-radius:14px;padding:15px;font-size:15.5px;font-weight:800;cursor:pointer;
+    box-shadow:0 3px 10px rgba(232,145,91,.35);transition:.18s;
+  }
+  .cta-btn:active{transform:scale(.98);}
+  .cta-note{font-size:11px;color:var(--text-sub);margin-top:9px;}
+
+  /* リスタート */
+  .restart{
+    text-align:center;padding:8px 0 18px;
+  }
+  .restart button{
+    background:transparent;border:1.5px solid var(--line);color:var(--text-sub);
+    border-radius:99px;padding:9px 20px;font-size:12.5px;cursor:pointer;
+  }
+
+  /* モーダル共通 */
+  .modal-bg{
+    position:fixed;inset:0;background:rgba(47,58,54,.5);z-index:50;
+    display:none;align-items:flex-end;justify-content:center;
+  }
+  .modal-bg.show{display:flex;animation:fadeIn .2s ease;}
+  @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+  .modal{
+    background:#fff;width:100%;max-width:480px;border-radius:22px 22px 0 0;
+    padding:26px 22px calc(26px + env(safe-area-inset-bottom));
+    text-align:center;animation:slideUp .3s cubic-bezier(.4,0,.2,1);
+  }
+  @keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+  .modal .m-icon{font-size:40px;}
+  .modal h3{margin:8px 0 6px;font-size:18px;color:var(--primary-dark);}
+  .modal p{font-size:13.5px;color:var(--text-sub);margin:0 0 18px;}
+  .modal .m-close{
+    width:100%;background:var(--primary);color:#fff;border:none;border-radius:14px;
+    padding:14px;font-size:15px;font-weight:700;cursor:pointer;
+  }
+  .modal .m-demo{font-size:11px;color:#b0bbb5;margin-top:12px;}
+
+  /* AI設定モーダル */
+  .settings .s-row{text-align:left;margin-bottom:14px;}
+  .settings label{font-size:12.5px;font-weight:700;color:var(--text);display:block;margin-bottom:6px;}
+  .settings input{
+    width:100%;border:1.5px solid var(--line);border-radius:12px;
+    padding:12px 14px;font-size:14px;font-family:inherit;color:var(--text);
+  }
+  .settings input:focus{outline:none;border-color:var(--primary);}
+  .settings .warn-box{
+    background:#fdf3ec;border:1px solid #f3d9c4;border-radius:12px;
+    padding:11px 13px;font-size:11.5px;color:#9a6a42;text-align:left;line-height:1.55;margin-bottom:16px;
+  }
+  .settings .btn-row{display:flex;gap:8px;}
+  .settings .btn-row button{
+    flex:1;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;border:none;
+  }
+  .settings .save{background:var(--primary);color:#fff;}
+  .settings .clear{background:transparent;color:var(--warn);border:1.5px solid var(--line);}
+  .settings .s-state{font-size:12px;margin-bottom:14px;text-align:left;color:var(--text-sub);}
+  .settings .s-state b{color:var(--primary-dark);}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="avatar">🌿</div>
+    <div>
+      <div class="title">かいごの相談チャット</div>
+      <div class="sub">あんしん施設さがしサポート</div>
+    </div>
+    <button class="ai-status off" id="aiStatus" onclick="openSettings()">
+      <span class="dot"></span><span id="aiStatusText">AI設定</span>
+    </button>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-label" id="progressLabel">はじめます</div>
+  </div>
+
+  <div class="chat" id="chat"></div>
+</div>
+
+<!-- ダミー相談モーダル -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div class="m-icon">💬</div>
+    <h3>相談員におつなぎします</h3>
+    <p>ご入力ありがとうございます。専門の相談員より、ご希望に合わせて施設のご案内・見学のお手伝いをいたします。お電話またはメールでご連絡いたします。</p>
+    <button class="m-close" onclick="closeModal()">わかりました</button>
+    <div class="m-demo">※ これはプロトタイプのデモ画面です</div>
+  </div>
+</div>
+
+<!-- AI設定モーダル -->
+<div class="modal-bg" id="settingsBg">
+  <div class="modal settings">
+    <div class="m-icon">✨</div>
+    <h3>AIパーソナライズ設定</h3>
+    <p>Claude APIキーを設定すると、ご回答に合わせて相談員AIが提案理由をその人専用に生成し、自由記述を深掘りしてお聞きします。</p>
+    <div class="s-state">現在の状態：<b id="settingsState">未設定（固定文で動作します）</b></div>
+    <div class="s-row">
+      <label for="apiKeyInput">Anthropic APIキー</label>
+      <input id="apiKeyInput" type="password" placeholder="sk-ant-..." autocomplete="off">
+    </div>
+    <div class="warn-box">
+      ⚠️ これはプロトタイプ用です。APIキーはこの端末のブラウザ（localStorage）にのみ保存され、ブラウザから直接Anthropicへ送信されます。<b>本番運用ではキーが利用者に露出するため、サーバー経由での呼び出しが必要です。</b>共有端末では使用後に「削除」してください。
+    </div>
+    <div class="btn-row">
+      <button class="clear" onclick="clearKey()">削除</button>
+      <button class="save" onclick="saveKey()">保存して閉じる</button>
+    </div>
+    <div class="m-demo" style="margin-top:14px;">キー未設定でも、すべての機能は固定文で動作します。</div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   データ定義
+   ============================================================ */
+
+// 介護施設の種別マスタ（メリット・デメリット文付き）
+const CARE_TYPES = {
+  groupHome: {
+    name: "グループホーム",
+    tag: "認知症の方むけ・少人数の共同生活",
+    merit: "認知症ケアの専門スタッフが常駐し、5〜9人の少人数ユニットで顔なじみの環境を保てます。家庭的な雰囲気の中で、料理や掃除など役割を持って暮らせるため、症状の安定が期待できます。",
+    demerit: "原則として施設のある市区町村に住民票がある方が対象です。看取りや重度の医療ケアには対応しきれない場合があり、寝たきりになると住み替えが必要なこともあります。"
+  },
+  tokuyo: {
+    name: "特別養護老人ホーム（特養）",
+    tag: "要介護3以上・公的施設で費用おさえめ",
+    merit: "公的な施設のため月額費用がおさえやすく、所得に応じた負担軽減も使えます。終身利用や看取りにも対応する施設が多く、長く安心して暮らせます。",
+    demerit: "要介護3以上が原則で、人気のため入居まで待機が生じることがあります。レクや居室の華やかさより生活支援が中心になります。"
+  },
+  kaigotsuki: {
+    name: "介護付き有料老人ホーム",
+    tag: "手厚い介護体制・24時間スタッフ常駐",
+    merit: "介護スタッフが24時間常駐し、要介護度が重くなっても住み替え不要で暮らせます。看取りやリハビリ、レクリエーションも充実し、ご家族も安心です。",
+    demerit: "民間施設のため月額費用は高めで、入居一時金が必要な施設もあります。手厚いぶんコスト面の検討が必要です。"
+  },
+  jutaku: {
+    name: "住宅型有料老人ホーム",
+    tag: "自立〜軽度・必要な介護だけ外部から",
+    merit: "生活の自由度が高く、必要な介護サービスだけ外部から選んで利用できます。比較的元気な方が、ご自身のペースで暮らしやすい形です。",
+    demerit: "介護が重くなると外部サービス費用がかさみ、介護付きへの住み替えが必要になる場合があります。"
+  },
+  sakou: {
+    name: "サービス付き高齢者向け住宅（サ高住）",
+    tag: "自立〜要支援・見守り付きの賃貸住宅",
+    merit: "安否確認と生活相談が付いたバリアフリー賃貸住宅で、自宅に近い自由な暮らしを保てます。比較的入居しやすく初期費用も控えめです。",
+    demerit: "介護サービスは外部契約が基本で、重度の介護や認知症の進行には対応が難しい場合があります。"
+  },
+  roken: {
+    name: "介護老人保健施設（老健）",
+    tag: "在宅復帰むけ・リハビリ中心",
+    merit: "医師やリハビリ職が常駐し、退院後に在宅復帰を目指したリハビリが受けられます。医療的ケアにも比較的強い施設です。",
+    demerit: "在宅復帰を目的とするため原則3〜6か月の利用が中心で、終身の住まいには向きません。"
+  },
+  carehouse: {
+    name: "ケアハウス（軽費老人ホーム）",
+    tag: "自立〜軽度・低費用の公的寄り施設",
+    merit: "比較的低費用で、食事や生活支援を受けながら自立した生活が送れます。所得が限られる方にも利用しやすい選択肢です。",
+    demerit: "介護が重くなると対応が難しく、定員が少なめで待機が出ることもあります。"
+  }
+};
+
+// サンプル施設データ（種別ごと）
+// サンプル施設データ（種別ごと）。エリアは選んだ市区町村＋汎用の町名で表示する
+const FACILITIES = {
+  groupHome: [
+    {name:"グループホーム ひだまりの家", town:"桜が丘", price:"16.5万円", rooms:1, reason:"認知症ケア専門員が常駐し、家庭的な少人数ユニットで穏やかに過ごせます。"},
+    {name:"グループホーム なごみ庵", town:"本町", price:"17.2万円", rooms:2, reason:"料理や園芸など役割づくりを大切にし、症状の安定に力を入れています。"},
+    {name:"グループホーム こもれび", town:"みどり台", price:"18.0万円", rooms:0, reason:"医療連携が手厚く、軽度の医療ケアにも対応できる安心の体制です。"},
+    {name:"グループホーム あいの里", town:"中央", price:"15.8万円", rooms:3, reason:"駅近で家族が通いやすく、見学・面会のしやすさが好評です。"},
+    {name:"グループホーム 結（ゆい）", town:"東", price:"17.8万円", rooms:1, reason:"夜間も複数スタッフ体制で、徘徊や夜間不安にも丁寧に寄り添います。"}
+  ],
+  tokuyo: [
+    {name:"特別養護老人ホーム 桜苑", town:"桜が丘", price:"11.5万円", rooms:0, reason:"公的施設で費用がおさえやすく、看取りまで対応できる安心の住まいです。"},
+    {name:"特養 みどりの杜", town:"みどり台", price:"10.8万円", rooms:1, reason:"負担軽減制度が使え、年金内での入居相談にも応じています。"},
+    {name:"特養 ふれあいホーム", town:"中央", price:"12.0万円", rooms:0, reason:"全室個室のユニット型で、プライバシーを保ちながら手厚いケアが受けられます。"},
+    {name:"特養 あおぞら苑", town:"東", price:"11.2万円", rooms:2, reason:"看護師が日中常駐し、医療的ケアが必要な方にも対応しています。"},
+    {name:"特養 やすらぎの里", town:"本町", price:"10.5万円", rooms:1, reason:"待機が比較的少なめで、早めの入居相談がしやすい施設です。"}
+  ],
+  kaigotsuki: [
+    {name:"介護付き有料 ロイヤルガーデン", town:"桜が丘", price:"28.5万円", rooms:2, reason:"24時間看護師常駐で、重度化や看取りまで住み替えなく安心です。"},
+    {name:"介護付き有料 サニーヴィラ", town:"本町", price:"26.0万円", rooms:1, reason:"リハビリとレクが充実し、生活の質を保ちたい方に好評です。"},
+    {name:"介護付き有料 こころ", town:"みどり台", price:"31.0万円", rooms:1, reason:"認知症フロアを備え、進行に応じたきめ細かいケアが可能です。"},
+    {name:"介護付き有料 グレイスコート", town:"中央", price:"25.5万円", rooms:3, reason:"手厚い人員配置(1.8:1)で、ご家族の安心感が高い施設です。"},
+    {name:"介護付き有料 ライフケア", town:"東", price:"29.8万円", rooms:0, reason:"医療機関と連携し、持病のある方の受け入れ実績が豊富です。"}
+  ],
+  jutaku: [
+    {name:"住宅型有料 のんびり苑", town:"桜が丘", price:"18.5万円", rooms:2, reason:"必要な介護だけ外部利用でき、自由度の高い暮らしが続けられます。"},
+    {name:"住宅型有料 さくらテラス", town:"本町", price:"19.2万円", rooms:1, reason:"併設の訪問介護でサポート体制が整い、移行もスムーズです。"},
+    {name:"住宅型有料 フォレスト", town:"みどり台", price:"22.0万円", rooms:1, reason:"アクティビティが豊富で、お元気な方が楽しく過ごせる環境です。"},
+    {name:"住宅型有料 ぬくもり", town:"中央", price:"17.8万円", rooms:2, reason:"費用バランスが良く、まず住み替えを試したい方に向いています。"},
+    {name:"住宅型有料 みらい", town:"東", price:"20.5万円", rooms:0, reason:"駅近で外出しやすく、ご家族の訪問も気軽にできます。"}
+  ],
+  sakou: [
+    {name:"サ高住 そよ風テラス", town:"桜が丘", price:"14.5万円", rooms:3, reason:"安否確認と生活相談付きで、自宅に近い自由な暮らしが保てます。"},
+    {name:"サ高住 やまぼうし", town:"本町", price:"13.8万円", rooms:2, reason:"初期費用がおさえめで、お一人暮らしの不安を解消できます。"},
+    {name:"サ高住 リブレ", town:"みどり台", price:"15.0万円", rooms:1, reason:"バリアフリー完備で、要支援の方が安心して住み替えられます。"},
+    {name:"サ高住 こはるび", town:"中央", price:"13.2万円", rooms:4, reason:"空室にゆとりがあり、すぐの入居相談がしやすい住まいです。"},
+    {name:"サ高住 まちなか", town:"東", price:"14.8万円", rooms:1, reason:"商店街が近く買い物や通院がしやすい立地が魅力です。"}
+  ],
+  roken: [
+    {name:"老健 リハビリパーク", town:"桜が丘", price:"13.0万円", rooms:2, reason:"理学療法士が在籍し、退院後の在宅復帰リハビリに力を入れています。"},
+    {name:"老健 けやきの森", town:"みどり台", price:"12.5万円", rooms:1, reason:"医師常駐で医療的ケアに強く、入院明けの方に安心です。"},
+    {name:"老健 ハーモニー", town:"中央", price:"13.5万円", rooms:1, reason:"集中的なリハビリプログラムで在宅復帰率が高い施設です。"},
+    {name:"老健 みなみ", town:"東", price:"12.8万円", rooms:0, reason:"短期入所(ショート)も活用でき、ご家族の介護負担を軽減できます。"},
+    {name:"老健 さわやか", town:"本町", price:"13.2万円", rooms:2, reason:"在宅復帰に向けた生活リハビリと退所後支援が充実しています。"}
+  ],
+  carehouse: [
+    {name:"ケアハウス なのはな", town:"桜が丘", price:"9.8万円", rooms:1, reason:"低費用で食事と生活支援が受けられ、年金内の暮らしを相談できます。"},
+    {name:"ケアハウス 陽だまり", town:"本町", price:"10.2万円", rooms:0, reason:"自立した方むけで、見守りを受けながら自分のペースで過ごせます。"},
+    {name:"ケアハウス すずらん", town:"中央", price:"9.5万円", rooms:1, reason:"所得に応じた負担軽減があり、費用面の不安を減らせます。"},
+    {name:"ケアハウス ふじ", town:"みどり台", price:"10.8万円", rooms:2, reason:"少人数でアットホーム、職員との距離が近く安心感があります。"},
+    {name:"ケアハウス みどり", town:"東", price:"10.0万円", rooms:1, reason:"駅近で通院・買い物がしやすく、軽度の方の住み替えに好評です。"}
+  ]
+};
+
+// はずせない条件（複数選択／足切り条件）
+const CONSTRAINTS = [
+  {key:"seikatsuhogo", ic:"🛟", label:"生活保護を受給している", sub:"生活保護に対応した施設を優先"},
+  {key:"medical",      ic:"🩺", label:"医療的ケアが欠かせない", sub:"痰の吸引・胃ろう・インスリンなど"},
+  {key:"urgent",       ic:"⏱️", label:"できるだけ早く入居したい", sub:"待機の少ない施設を優先"},
+  {key:"couple",       ic:"👫", label:"夫婦・ご家族と一緒に入りたい", sub:"二人入居に対応した施設"}
+];
+
+// 特に大事にしたいこと（優先順位トップ3）
+const PRIORITIES = [
+  {key:"cost",     ic:"💰", label:"費用の安さ"},
+  {key:"distance", ic:"🚃", label:"家・駅からの近さ"},
+  {key:"medical",  ic:"🩺", label:"医療体制の充実"},
+  {key:"dementia", ic:"🧠", label:"認知症ケアの専門性"},
+  {key:"active",   ic:"🎉", label:"にぎやかな交流・レク"},
+  {key:"calm",     ic:"🍵", label:"静かで落ち着いた環境"},
+  {key:"private",  ic:"🚪", label:"個室・プライバシー"}
+];
+
+// 優先項目ごとの種別スコア加点（タップ順の重み 3/2/1 を掛ける）
+const PRIORITY_BOOST = {
+  cost:     {tokuyo:3, carehouse:3, sakou:2, kaigotsuki:-3, jutaku:-1},
+  distance: {sakou:1, jutaku:1, kaigotsuki:1},
+  medical:  {kaigotsuki:3, roken:3, tokuyo:2, groupHome:-1},
+  dementia: {groupHome:4, kaigotsuki:2},
+  active:   {kaigotsuki:2, jutaku:2, sakou:2},
+  calm:     {groupHome:2, carehouse:2, tokuyo:1, roken:1},
+  private:  {kaigotsuki:2, jutaku:2, tokuyo:1}
+};
+
+// 施設を考え始めたきっかけ（複数選択／リードの背景把握）
+const TRIGGERS = [
+  {key:"discharge", ic:"🏥", label:"入院・退院が決まっている", sub:"退院後の行き先が必要"},
+  {key:"burden",    ic:"😣", label:"在宅介護の負担が大きい", sub:"家族が支えきれない"},
+  {key:"alone",     ic:"🏠", label:"一人暮らしが不安", sub:"転倒・火の元・服薬など"},
+  {key:"dementia",  ic:"🧠", label:"認知症の症状が進んできた", sub:""},
+  {key:"caregiver", ic:"👤", label:"介護していた家族が続けられない", sub:"病気・仕事・高齢化など"},
+  {key:"quality",   ic:"🌱", label:"より良い環境で暮らしたい", sub:"本人・家族の希望"},
+  {key:"thinking",  ic:"💭", label:"まだ迷っている・相談したい", sub:""}
+];
+
+const CONSTRAINT_LABELS = Object.fromEntries(CONSTRAINTS.map(o=>[o.key, o.label]));
+const PRIORITY_LABELS = Object.fromEntries(PRIORITIES.map(o=>[o.key, o.label]));
+const TRIGGER_LABELS = Object.fromEntries(TRIGGERS.map(o=>[o.key, o.label]));
+
+/* ============================================================
+   状態管理
+   ============================================================ */
+const state = { area:null, care:null, dementia:null, budget:null, constraints:[], priorities:[], free:"", deepDive:[], timing:null, triggers:[], timingDone:false, chosenType:null, top3:[] };
+let step = 0;
+const TOTAL_STEPS = 8; // ステップ1〜8を進捗に反映
+
+const chat = document.getElementById('chat');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+
+/* ============================================================
+   Claude API 連携
+   ------------------------------------------------------------
+   単一HTMLのプロトタイプのため、ブラウザから直接 Anthropic API を
+   呼び出します（anthropic-dangerous-direct-browser-access）。
+   APIキーは localStorage に保存。未設定時はすべて固定文で動作。
+   ============================================================ */
+const MODEL = "claude-opus-4-8";
+let apiKey = localStorage.getItem("anthropicApiKey") || "";
+
+function aiEnabled(){ return !!apiKey; }
+
+// Messages API 呼び出し（構造化出力対応）。失敗時は例外を投げる。
+async function claudeMessages({ system, messages, maxTokens = 1024, schema = null }){
+  const body = { model: MODEL, max_tokens: maxTokens, system, messages };
+  if(schema){ body.output_config = { format: { type: "json_schema", schema } }; }
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify(body)
+  });
+  if(!res.ok){
+    let detail = "";
+    try { detail = (await res.json())?.error?.message || ""; } catch(_){}
+    throw new Error("Claude API error " + res.status + (detail ? "： " + detail : ""));
+  }
+  const data = await res.json();
+  if(data.stop_reason === "refusal") throw new Error("refusal");
+  return (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+}
+
+// 相談員ペルソナ（共通の語り口）
+const PERSONA = `あなたは介護施設さがしに寄り添う、経験豊富で信頼される相談員です。
+施設を探すご家族は不安や戸惑い、罪悪感を抱えていることが多いことを理解しています。
+語り口は、やさしく、誠実で、安心感のあるトーン。専門性は保ちつつ、専門用語は噛み砕きます。
+「ありがとうございます。把握しました」のようなテンプレ的な決まり文句の繰り返しは避け、相手の言葉に具体的に応答してください。`;
+
+// これまでの回答をテキスト化（プロンプトに渡す）
+function profileText(){
+  const lines = [
+    "・お探しの地域：" + (state.area || "未選択"),
+    "・要介護度：" + (state.care || "未選択"),
+    "・認知症の状況：" + (state.dementia || "未選択"),
+    "・月額のご予算：" + (state.budget || "未選択"),
+    "・はずせない条件：" + (state.constraints.length ? state.constraints.map(k=>CONSTRAINT_LABELS[k]).join("、") : "特になし"),
+    "・特に大事にしたいこと（優先順）：" + (state.priorities.length ? state.priorities.map((k,i)=>(i+1)+". "+PRIORITY_LABELS[k]).join(" / ") : "特になし"),
+    "・入居をお考えの時期：" + (state.timing || "未選択"),
+    "・検討のきっかけ：" + (state.triggers.length ? state.triggers.map(k=>TRIGGER_LABELS[k]).join("、") : "未選択"),
+    "・施設を探そうと思った理由／気がかりなこと：" + (state.free ? state.free : "（未記入）")
+  ];
+  if(state.deepDive && state.deepDive.length){
+    lines.push("・相談員との深掘り対話：");
+    state.deepDive.forEach(m=>{
+      lines.push("    " + (m.role === "assistant" ? "相談員" : "ご家族") + "「" + m.text + "」");
+    });
+  }
+  return lines.join("\n");
+}
+
+/* ============================================================
+   ユーティリティ：吹き出し・選択肢の描画
+   ============================================================ */
+function scrollDown(){ requestAnimationFrame(()=>{ chat.scrollTop = chat.scrollHeight; }); }
+
+function updateProgress(n,label){
+  const pct = Math.min(100, Math.round(n/TOTAL_STEPS*100));
+  progressFill.style.width = pct + "%";
+  progressLabel.textContent = label || ("ステップ " + n + " / " + TOTAL_STEPS);
+}
+
+function escapeHtml(s){
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function botBubble(text, {ai=false, raw=false} = {}){
+  const row = document.createElement('div');
+  row.className = 'row bot';
+  const inner = raw ? text : escapeHtml(text);
+  const tag = ai ? `<span class="ai-tag">✨ AI相談員</span>` : "";
+  row.innerHTML = `<div class="mini-avatar">🌿</div><div class="bubble">${tag}${inner}</div>`;
+  chat.appendChild(row); scrollDown();
+  return row;
+}
+function userBubble(text){
+  const row = document.createElement('div');
+  row.className = 'row user';
+  row.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
+  chat.appendChild(row); scrollDown();
+}
+
+// タイピング演出（タイマー後にコールバック）
+function botTyping(delay, cb){
+  const row = startTyping();
+  setTimeout(()=>{ row.remove(); cb(); }, delay);
+}
+// 持続的なタイピングバブル（API待ち用）。呼び出し側で .remove()
+function startTyping(){
+  const row = document.createElement('div');
+  row.className = 'row bot';
+  row.innerHTML = `<div class="mini-avatar">🌿</div><div class="bubble typing"><span></span><span></span><span></span></div>`;
+  chat.appendChild(row); scrollDown();
+  return row;
+}
+
+// 複数の吹き出しを順に出す
+function botSequence(messages, done){
+  let i = 0;
+  function next(){
+    if(i >= messages.length){ if(done) done(); return; }
+    botTyping(messages[i].d || 700, ()=>{ botBubble(messages[i].t, {raw:true}); i++; next(); });
+  }
+  next();
+}
+
+// 選択肢ボタン群を描画。選ぶと回答を吹き出し化してコールバック
+function showOptions(options, onPick){
+  const wrap = document.createElement('div');
+  wrap.className = 'options';
+  options.forEach(o=>{
+    const b = document.createElement('button');
+    b.className = 'opt-btn';
+    b.innerHTML = `<span class="ic">${o.ic||""}</span><span>${o.label}${o.sub?`<span class="sub">${o.sub}</span>`:""}</span>`;
+    b.onclick = ()=>{
+      wrap.remove();
+      userBubble(o.value);
+      onPick(o);
+    };
+    wrap.appendChild(b);
+  });
+  chat.appendChild(wrap); scrollDown();
+}
+
+// 自由記述入力。skip可否を選べる
+function showTextInput({placeholder, hint, sendLabel, allowSkip, onSend, onSkip}){
+  const wrap = document.createElement('div');
+  wrap.className = 'free-input';
+  wrap.innerHTML = `
+    <textarea placeholder="${placeholder||""}"></textarea>
+    ${hint?`<div class="hint">${hint}</div>`:""}
+    <div class="send-row">
+      <button class="send-btn">${sendLabel||"送信する"}</button>
+      ${allowSkip?`<button class="skip-btn">スキップ</button>`:""}
+    </div>`;
+  chat.appendChild(wrap); scrollDown();
+  const ta = wrap.querySelector('textarea');
+  ta.focus();
+  wrap.querySelector('.send-btn').onclick = ()=>{
+    const v = ta.value.trim();
+    wrap.remove();
+    onSend(v);
+  };
+  if(allowSkip){
+    wrap.querySelector('.skip-btn').onclick = ()=>{ wrap.remove(); onSkip(); };
+  }
+}
+
+/* ============================================================
+   会話フロー
+   ============================================================ */
+function start(){
+  step = 0;
+  updateProgress(0, "はじめます");
+  botSequence([
+    {t:"こんにちは。介護施設さがしのお手伝いをする相談員です🌿", d:500},
+    {t:"はじめての施設さがしは、わからないことや不安も多いですよね。いくつか質問しながら、ご本人に合った施設をいっしょに考えていきます。", d:900},
+    {t:"答えやすい質問から、ボタンで選んでいきましょう。気がかりなことは、あとでじっくりお聞きしますね。", d:900}
+  ], askArea);
+}
+
+// ステップ1：地域（東京23区から選択）
+const WARDS = [
+  "千代田区","中央区","港区","新宿区","文京区","台東区","墨田区","江東区",
+  "品川区","目黒区","大田区","世田谷区","渋谷区","中野区","杉並区","豊島区",
+  "北区","荒川区","板橋区","練馬区","足立区","葛飾区","江戸川区","その他の地域"
+];
+function askArea(){
+  updateProgress(1, "ステップ1 / 8　地域");
+  botTyping(700, ()=>{
+    botBubble("まず、施設をお探しの<b>地域（市区町村）</b>を選んでください。", {raw:true});
+    showWardPicker();
+  });
+}
+function showWardPicker(){
+  const wrap = document.createElement('div');
+  wrap.className = 'ward-grid';
+  WARDS.forEach(w=>{
+    const b = document.createElement('button');
+    b.className = 'ward-chip';
+    b.textContent = w;
+    b.onclick = ()=>{ wrap.remove(); state.area = w; userBubble(w); askCare(); };
+    wrap.appendChild(b);
+  });
+  chat.appendChild(wrap); scrollDown();
+}
+
+// ステップ2：要介護度
+function askCare(){
+  updateProgress(2, "ステップ2 / 8　要介護度");
+  botSequence([
+    {t:"ありがとうございます。次に、ご本人の<b>要介護度</b>を教えてください。", d:700},
+    {t:"わからない場合は「まだ判定を受けていない」を選んでくださいね。", d:600}
+  ], ()=>{
+    showOptions([
+      {ic:"🚶", label:"自立", sub:"日常生活はおおむねご自身で", value:"自立"},
+      {ic:"🌱", label:"要支援1〜2", sub:"一部に見守り・支援が必要", value:"要支援1〜2"},
+      {ic:"🤝", label:"要介護1〜2", sub:"部分的に介護が必要", value:"要介護1〜2"},
+      {ic:"🛏️", label:"要介護3〜5", sub:"日常的に手厚い介護が必要", value:"要介護3〜5"},
+      {ic:"❓", label:"まだ判定を受けていない", sub:"未判定・申請中", value:"未判定"}
+    ], (o)=>{ state.care = o.value; askDementia(); });
+  });
+}
+
+// ステップ3：認知症
+function askDementia(){
+  updateProgress(3, "ステップ3 / 8　認知症");
+  botTyping(700, ()=>{
+    botBubble("<b>認知症</b>の症状について、いちばん近いものを教えてください。", {raw:true});
+    showOptions([
+      {ic:"😊", label:"なし", sub:"診断や目立つ症状はない", value:"認知症なし"},
+      {ic:"🍃", label:"軽度", sub:"もの忘れなど。生活はおおむね自立", value:"認知症（軽度）"},
+      {ic:"🌧️", label:"中度以上", sub:"見守りや専門的なケアが必要", value:"認知症（中度以上）"}
+    ], (o)=>{ state.dementia = o.value; askBudget(); });
+  });
+}
+
+// ステップ4：予算
+function askBudget(){
+  updateProgress(4, "ステップ4 / 8　ご予算");
+  botSequence([
+    {t:"無理のない範囲が大切です。ご希望の<b>月額予算</b>を教えてください。", d:700},
+    {t:"家賃・食費・管理費などを含めたおおよその目安で大丈夫です。", d:600}
+  ], ()=>{
+    showOptions([
+      {ic:"💰", label:"15万円以下", sub:"費用をおさえたい", value:"月額15万円以下"},
+      {ic:"💴", label:"15万〜25万円", sub:"標準的な範囲で", value:"月額15〜25万円"},
+      {ic:"✨", label:"25万円以上", sub:"手厚さ・環境を重視", value:"月額25万円以上"}
+    ], (o)=>{ state.budget = o.value; askConstraints(); });
+  });
+}
+
+// ステップ5a：はずせない条件（複数選択／足切り）
+function askConstraints(){
+  updateProgress(5, "ステップ5 / 8　ご希望の条件");
+  botSequence([
+    {t:"ありがとうございます。ここからは、施設選びで<b>はずせない条件</b>と<b>大事にしたいこと</b>をうかがいます。", d:800},
+    {t:"まず、当てはまるものがあれば選んでください（複数選べます。なければそのまま「決定」でOKです）。", d:900}
+  ], ()=>{
+    showChecklist(CONSTRAINTS, (keys)=>{ state.constraints = keys; askPriorities(); });
+  });
+}
+
+// ステップ5b：大事にしたいことトップ3（タップ順＝優先度）
+function askPriorities(){
+  updateProgress(5, "ステップ5 / 8　ご希望の条件");
+  botTyping(700, ()=>{
+    botBubble("次に、施設選びで<b>特に大事にしたいこと</b>を、大事な順に最大3つ選んでください。タップした順番が優先順位になります🌿", {raw:true});
+    showPriorityPicker(PRIORITIES, 3, (keys)=>{ state.priorities = keys; askFree(); });
+  });
+}
+
+// 複数選択チェックリスト（決定ボタンで確定）
+function showChecklist(options, onConfirm){
+  const selected = new Set();
+  const wrap = document.createElement('div');
+  wrap.className = 'options';
+  options.forEach(o=>{
+    const b = document.createElement('button');
+    b.className = 'opt-btn';
+    b.innerHTML = `<span class="ic">${o.ic||""}</span><span>${o.label}${o.sub?`<span class="sub">${o.sub}</span>`:""}</span><span class="chk">✓</span>`;
+    b.onclick = ()=>{
+      if(selected.has(o.key)){ selected.delete(o.key); b.classList.remove('sel'); }
+      else { selected.add(o.key); b.classList.add('sel'); }
+    };
+    wrap.appendChild(b);
+  });
+  chat.appendChild(wrap);
+  const cr = document.createElement('div');
+  cr.className = 'confirm-row';
+  cr.innerHTML = `<button class="confirm-btn">これで決定</button>`;
+  chat.appendChild(cr); scrollDown();
+  cr.querySelector('.confirm-btn').onclick = ()=>{
+    const keys = options.map(o=>o.key).filter(k=>selected.has(k));
+    wrap.remove(); cr.remove();
+    const labels = keys.map(k=>options.find(o=>o.key===k).label);
+    userBubble(labels.length ? labels.join("、") : "特になし");
+    onConfirm(keys);
+  };
+}
+
+// 優先順位ピッカー（タップ順に番号付与、最大max個）
+function showPriorityPicker(options, max, onConfirm){
+  const order = [];
+  const chips = {};
+  const wrap = document.createElement('div');
+  wrap.className = 'prio-wrap';
+  options.forEach(o=>{
+    const c = document.createElement('button');
+    c.className = 'prio-chip';
+    c.innerHTML = `<span class="ic">${o.ic}</span><span>${o.label}</span>`;
+    c.onclick = ()=>{
+      const i = order.indexOf(o.key);
+      if(i>=0){ order.splice(i,1); }
+      else { if(order.length>=max) return; order.push(o.key); }
+      render();
+    };
+    chips[o.key] = c;
+    wrap.appendChild(c);
+  });
+  function render(){
+    options.forEach(o=>{
+      const c = chips[o.key];
+      const rank = order.indexOf(o.key);
+      c.classList.toggle('sel', rank>=0);
+      let num = c.querySelector('.num');
+      if(rank>=0){
+        if(!num){ num = document.createElement('span'); num.className='num'; c.insertBefore(num, c.firstChild); }
+        num.textContent = rank+1;
+      } else if(num){ num.remove(); }
+    });
+  }
+  chat.appendChild(wrap);
+  const cr = document.createElement('div');
+  cr.className = 'confirm-row';
+  cr.innerHTML = `<button class="confirm-btn">これで決定</button>`;
+  chat.appendChild(cr); scrollDown();
+  cr.querySelector('.confirm-btn').onclick = ()=>{
+    wrap.remove(); cr.remove();
+    const labels = order.map((k,i)=>`${i+1}. ${options.find(o=>o.key===k).label}`);
+    userBubble(labels.length ? labels.join("　") : "特にこだわりなし");
+    onConfirm(order.slice());
+  };
+}
+
+// ステップ6：自由記述（→ AIによる深掘り対話へ）
+function askFree(){
+  updateProgress(6, "ステップ6 / 8　気がかりなこと");
+  botSequence([
+    {t:"ここまでありがとうございます。最後に、いちばん大切なことをお聞きします。", d:700},
+    {t:"今、施設を探そうと思った<b>理由</b>や、ご本人・ご家族で<b>気がかりなこと</b>を、どんなことでも教えてください。文章でかまいません🌿", d:1000}
+  ], ()=>{
+    showTextInput({
+      placeholder:"例）一人暮らしの母の物忘れが進み、火の元が心配です。本人は自宅にいたい気持ちもあり、家族として何が一番良いか迷っています…",
+      hint:"💡 短くても、まとまっていなくても大丈夫です。",
+      sendLabel:"この内容で相談する",
+      allowSkip:true,
+      onSend:(v)=>{ state.free = v; userBubble(v ? v : "（特にありません）"); startDeepDive(); },
+      onSkip:()=>{ state.free = ""; userBubble("（あとで相談員に伝えます）"); proposeTypes(); }
+    });
+  });
+}
+
+/* ============================================================
+   ステップ5b：AIによる深掘り対話（最大2往復）
+   ============================================================ */
+const DEEP_SCHEMA = {
+  type: "object",
+  properties: {
+    message: { type: "string" },
+    need_more: { type: "boolean" }
+  },
+  required: ["message", "need_more"],
+  additionalProperties: false
+};
+
+function deepSystem(){
+  return PERSONA + `
+
+【今の状況（ご家族のこれまでの回答）】
+${profileText()}
+
+【あなたのタスク】
+ご家族が書いてくださった「探そうと思った理由・気がかりなこと」に対して、まず気持ちに具体的に寄り添う返答をしてください。そのうえで、施設の種別選びの参考になる背景（ご本人の希望、ご家族の事情、医療面、これまでの経緯、譲れない点など）をもっと知りたい場合は、やわらかく1つだけ具体的な質問を添えてください。
+- 返答は2〜4文程度。相手の言葉を受けとめ、決めつけずに。
+- まだ深く聞きたいことがあれば need_more=true とし、message の最後に質問を1つ入れる。
+- 十分に背景が見えた、またはこれ以上聞く必要がないと感じたら need_more=false とし、message は気持ちに寄り添う短い締めくくり（質問なし）にして、これから合う施設の種別を提案する流れにつなげる。
+- 出力は必ず指定のJSON形式で。`;
+}
+
+async function startDeepDive(){
+  updateProgress(6, "ステップ6 / 8　気がかりなこと");
+
+  // APIキー未設定：従来どおり1往復で次へ
+  if(!aiEnabled()){
+    botSequence([
+      {t:"お気持ち、しっかり受け取りました。おひとりで抱えず、ここまで進めてくださってありがとうございます。", d:900}
+    ], proposeTypes);
+    return;
+  }
+
+  if(state.free === ""){ proposeTypes(); return; }
+
+  state.deepDive = [];
+  const convo = [{ role:"user", content: state.free }];
+  let rounds = 0;
+  const MAX_FOLLOWUPS = 2;
+
+  async function runTurn(){
+    const typing = startTyping();
+    let result;
+    try{
+      const txt = await claudeMessages({ system: deepSystem(), messages: convo, maxTokens: 700, schema: DEEP_SCHEMA });
+      result = JSON.parse(txt);
+    }catch(e){
+      typing.remove();
+      notifyAiError(e);
+      botBubble("いただいた内容も大切にしながら、合いそうな施設の種別をご提案しますね。");
+      proposeTypes();
+      return;
+    }
+    typing.remove();
+    botBubble(result.message, {ai:true});
+    state.deepDive.push({ role:"assistant", text: result.message });
+    convo.push({ role:"assistant", content: result.message });
+
+    if(result.need_more && rounds < MAX_FOLLOWUPS){
+      rounds++;
+      showTextInput({
+        placeholder:"お気持ちのままで大丈夫です…",
+        sendLabel:"返信する",
+        allowSkip:true,
+        onSend:(v)=>{
+          if(!v){ proposeTypes(); return; }
+          userBubble(v);
+          convo.push({ role:"user", content: v });
+          state.deepDive.push({ role:"user", text: v });
+          runTurn();
+        },
+        onSkip:()=>{ proposeTypes(); }
+      });
+    } else {
+      proposeTypes();
+    }
+  }
+  runTurn();
+}
+
+/* ============================================================
+   ステップ6：種別判定ロジック → トップ3提案
+   ============================================================ */
+function rankTypes(){
+  const score = {groupHome:0,tokuyo:0,kaigotsuki:0,jutaku:0,sakou:0,roken:0,carehouse:0};
+
+  switch(state.care){
+    case "自立":
+      score.sakou+=4; score.carehouse+=4; score.jutaku+=3; break;
+    case "要支援1〜2":
+      score.sakou+=4; score.carehouse+=3; score.jutaku+=3; score.groupHome+=1; break;
+    case "要介護1〜2":
+      score.jutaku+=3; score.kaigotsuki+=3; score.groupHome+=2; score.sakou+=2; score.roken+=1; break;
+    case "要介護3〜5":
+      score.tokuyo+=5; score.kaigotsuki+=4; score.roken+=2; score.groupHome+=1; break;
+    case "未判定":
+      score.jutaku+=2; score.sakou+=2; score.kaigotsuki+=2; score.roken+=1; break;
+  }
+
+  if(state.dementia === "認知症（中度以上）"){
+    score.groupHome+=6; score.kaigotsuki+=2; score.tokuyo+=1;
+    score.sakou-=2; score.carehouse-=2; score.jutaku-=1;
+  } else if(state.dementia === "認知症（軽度）"){
+    score.groupHome+=3; score.kaigotsuki+=1;
+  }
+
+  switch(state.budget){
+    case "月額15万円以下":
+      score.tokuyo+=3; score.carehouse+=3; score.sakou+=2; score.roken+=1;
+      score.kaigotsuki-=3; score.jutaku-=1; break;
+    case "月額15〜25万円":
+      score.jutaku+=2; score.groupHome+=2; score.sakou+=1; score.kaigotsuki+=1; break;
+    case "月額25万円以上":
+      score.kaigotsuki+=4; score.jutaku+=2; score.groupHome+=1; break;
+  }
+
+  // はずせない条件（足切り・強い重みづけ）
+  applyConstraints(score);
+  // 大事にしたいことトップ3（タップ順の重み 3/2/1）
+  applyPriorities(score);
+
+  const order = Object.keys(CARE_TYPES);
+  let ranked = order.map(k=>({key:k, s:score[k]})).sort((a,b)=> b.s - a.s || order.indexOf(a.key)-order.indexOf(b.key));
+
+  // 重要ルール：認知症あり（軽度/中度以上）はグループホームを必ずトップ3上位に
+  const hasDementia = state.dementia === "認知症（軽度）" || state.dementia === "認知症（中度以上）";
+  if(hasDementia){
+    ranked = ranked.filter(r=>r.key!=="groupHome");
+    // 中度以上は上位、軽度は2番手付近。ただし医療的ケア必須なら一段下げる
+    // （それでも必ずトップ3内に含める＝専門性を示す）
+    let pos = (state.dementia === "認知症（中度以上）") ? 0 : 1;
+    if(state.constraints.includes("medical")) pos += 1;
+    pos = Math.min(pos, 2);
+    ranked.splice(pos, 0, {key:"groupHome", s:score.groupHome});
+  }
+
+  return ranked.slice(0,3).map(r=>r.key);
+}
+
+// はずせない条件をスコアに反映
+function applyConstraints(score){
+  const c = state.constraints || [];
+  if(c.includes("seikatsuhogo")){ // 生活保護：公的・低費用を強く優先、高額民間を抑制
+    score.tokuyo+=4; score.carehouse+=4; score.sakou+=1; score.kaigotsuki-=6; score.jutaku-=2;
+  }
+  if(c.includes("medical")){ // 医療的ケア必須：医療に強い種別を優先、弱い種別を抑制
+    score.kaigotsuki+=5; score.roken+=4; score.tokuyo+=3;
+    score.groupHome-=4; score.sakou-=3; score.carehouse-=3; score.jutaku-=2;
+  }
+  if(c.includes("urgent")){ // 早期入居：待機の出やすい特養を抑制、入りやすい種別を優先
+    score.jutaku+=2; score.sakou+=2; score.kaigotsuki+=2; score.tokuyo-=3;
+  }
+  if(c.includes("couple")){ // 夫婦・二人入居：二人入居しやすい種別を優先
+    score.jutaku+=3; score.sakou+=3; score.kaigotsuki+=2; score.groupHome-=3; score.tokuyo-=2;
+  }
+}
+
+// 優先順位（タップ順の重み 3/2/1）をスコアに反映
+function applyPriorities(score){
+  (state.priorities || []).forEach((key, idx)=>{
+    const weight = 3 - idx; // 1位=3, 2位=2, 3位=1
+    const boosts = PRIORITY_BOOST[key] || {};
+    for(const t in boosts){ score[t] += boosts[t] * weight; }
+  });
+}
+
+// 固定理由（AI未使用時）に、最優先項目を一言そえる
+function priorityNote(){
+  if(!state.priorities || !state.priorities.length) return "";
+  const map = {cost:"費用面", distance:"通いやすさ", medical:"医療体制", dementia:"認知症ケア", active:"交流・レク", calm:"落ち着いた環境", private:"プライバシー"};
+  const top = map[state.priorities[0]];
+  return top ? `特に「${top}」を大切にされたい点も考慮しました。` : "";
+}
+
+// 固定の「おすすめ理由」（AI未使用時のフォールバック）
+function reasonFor(key){
+  const careTxt = state.care;
+  const budTxt = (state.budget||"").replace("月額","");
+  const dem = state.dementia;
+  switch(key){
+    case "groupHome":
+      return (dem==="認知症（中度以上）"
+        ? "認知症が中度以上とのことなので、専門ケアと少人数の落ち着いた環境を最優先しました。"
+        : "もの忘れの不安があるため、早めに認知症ケアの専門環境を選択肢に入れました。")
+        + `${state.area}内で通いやすい施設をご用意できます。`;
+    case "tokuyo":
+      return `${careTxt}で費用を${budTxt}に抑えたいご希望に、公的で負担の軽い特養がよく合います。`;
+    case "kaigotsuki":
+      return `${careTxt}でも住み替えなく手厚い介護を受けられる点が、ご家族の安心につながります。`;
+    case "jutaku":
+      return `${careTxt}のうちは自由度を保ちつつ、必要な介護だけ足せる柔軟さが向いています。`;
+    case "sakou":
+      return `${careTxt}で自宅に近い暮らしを保ちたい方に、見守り付きの住まいとして最適です。`;
+    case "roken":
+      return `退院後やリハビリのご希望があれば、医療・リハビリに強い老健が候補になります。`;
+    case "carehouse":
+      return `${careTxt}で費用を${budTxt}に抑えたいご希望に、低費用のケアハウスが合います。`;
+  }
+  return "";
+}
+
+// AIで種別トップ3の「おすすめ理由」を生成（失敗時 null）
+const TYPE_REASON_SCHEMA = {
+  type: "object",
+  properties: {
+    reasons: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { key: { type: "string" }, reason: { type: "string" } },
+        required: ["key", "reason"],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ["reasons"],
+  additionalProperties: false
+};
+
+async function generateTypeReasons(keys){
+  if(!aiEnabled()) return null;
+  const typesInfo = keys.map(k=>({ key:k, name:CARE_TYPES[k].name, 特徴:CARE_TYPES[k].tag }));
+  const system = PERSONA + `
+
+【タスク】
+ご家族の状況をすべて踏まえ、提案する各「介護施設の種別」について、このご家族に向けた『おすすめ理由』を1つずつ生成してください。
+- 各理由は1〜2文（60〜120字程度）。
+- 地域・要介護度・認知症・予算に加え、自由記述や深掘り対話で語られた感情・背景を必ず反映し、その人専用の言葉にすること。
+- 「なぜこの方にこの種別が合うのか」が伝わるように。一般論の繰り返しは避ける。
+- key には渡された種別の key をそのまま使うこと。`;
+  const userContent =
+    "■ご家族の状況\n" + profileText() +
+    "\n\n■提案する種別（この3つそれぞれに理由を）\n" + JSON.stringify(typesInfo, null, 2);
+  const txt = await claudeMessages({
+    system,
+    messages: [{ role:"user", content: userContent }],
+    maxTokens: 1500,
+    schema: TYPE_REASON_SCHEMA
+  });
+  const data = JSON.parse(txt);
+  const map = {};
+  (data.reasons || []).forEach(r => { map[r.key] = r.reason; });
+  return map;
+}
+
+/* ============================================================
+   入居をお考えの時期・きっかけ（リードの温度感を把握）
+   ※ 外部窓口へ誘導せず、自社の相談員につなぐ前提で温度感を聞く
+   ============================================================ */
+function askTiming(){
+  updateProgress(7, "ステップ7 / 8　入居の時期");
+  botSequence([
+    {t:"ありがとうございます。施設のご提案の前に、<b>入居をお考えの時期</b>を教えてください。お急ぎ度に合わせてご案内します🌿", d:900}
+  ], ()=>{
+    showOptions([
+      {ic:"🚨", label:"今すぐ〜1ヶ月以内", sub:"急いで探したい", value:"今すぐ〜1ヶ月以内"},
+      {ic:"📅", label:"1〜3ヶ月以内", sub:"なるべく早めに", value:"1〜3ヶ月以内"},
+      {ic:"🗓️", label:"半年以内", sub:"少し先を見据えて", value:"半年以内"},
+      {ic:"🔎", label:"まだ具体的には未定", sub:"情報を集めている段階", value:"まだ未定（情報収集中）"}
+    ], (o)=>{ state.timing = o.value; askTrigger(); });
+  });
+}
+
+function askTrigger(){
+  updateProgress(7, "ステップ7 / 8　検討のきっかけ");
+  botSequence([
+    {t:"今回、施設を考え始めた<b>きっかけ</b>として近いものを選んでください（複数選べます）。", d:800}
+  ], ()=>{
+    showChecklist(TRIGGERS, (keys)=>{ state.triggers = keys; afterTiming(); });
+  });
+}
+
+// 時期に合わせた、自社相談員につなぐひと言（外部誘導はしない）
+function timingMessage(){
+  switch(state.timing){
+    case "今すぐ〜1ヶ月以内":
+      return "お急ぎなのですね。今すぐ入居しやすい施設を優先して、相談員がスピーディにお探しします。まずは合う種別から見ていきましょう。";
+    case "1〜3ヶ月以内":
+      return "なるべく早めに、ですね。ご条件に合う施設を絞ってご提案し、気になる施設は見学のご予約までお手伝いします。";
+    case "半年以内":
+      return "少し先を見据えての検討、よいタイミングです。今のうちに候補と空き状況を把握しておくと安心ですよ。一緒に見ていきましょう。";
+    default:
+      return "今は無理に決めなくて大丈夫です。どんな選択肢があるか、相談員が一緒に整理します。気になる施設だけ資料や見学のお手伝いもできますので、まずは候補をのぞいてみましょう。";
+  }
+}
+
+function afterTiming(){
+  botSequence([{ t: timingMessage(), d: 900 }], ()=>{
+    state.timingDone = true;
+    proposeTypes();
+  });
+}
+
+
+function proposeTypes(){
+  // 先に「入居の時期・きっかけ」を聞いてから種別提案へ
+  if(!state.timingDone){ askTiming(); return; }
+  updateProgress(7, "ステップ7 / 8　合う種別");
+  const top3 = rankTypes();
+  state.top3 = top3;
+
+  const intros = [];
+  if(!(state.deepDive && state.deepDive.length)){
+    intros.push({ t: state.free
+      ? "お気持ち、しっかり受け取りました。おひとりで抱えず、ここまで進めてくださってありがとうございます。"
+      : "ここまでありがとうございます。", d:900 });
+  }
+  intros.push({ t:"いきなり施設をご案内する前に、まずご本人に<b>合いそうな『施設の種別』をトップ3</b>でご提案します。それぞれのメリット・デメリットも添えますので、ピンとくるものをお選びください🌿", d:1100 });
+
+  botSequence(intros, async ()=>{
+    if(aiEnabled()){
+      const typing = startTyping();
+      let reasons = null;
+      try{ reasons = await generateTypeReasons(top3); }
+      catch(e){ notifyAiError(e); reasons = null; }
+      typing.remove();
+      renderTypeCards(top3, reasons);
+    } else {
+      botTyping(900, ()=> renderTypeCards(top3, null));
+    }
+  });
+}
+
+function renderTypeCards(keys, reasons){
+  const wrap = document.createElement('div');
+  wrap.className = 'type-cards';
+  keys.forEach((k,i)=>{
+    const t = CARE_TYPES[k];
+    const fixedReason = (reasonFor(k) + (priorityNote() ? " " + priorityNote() : "")).trim();
+    const reasonText = (reasons && reasons[k]) ? reasons[k] : fixedReason;
+    const aiTag = (reasons && reasons[k]) ? `<span class="ai-tag">✨ AIがあなた向けに生成</span> ` : "";
+    const card = document.createElement('div');
+    card.className = 'type-card';
+    card.innerHTML = `
+      <div class="tc-head">
+        <div class="rank-badge r${i+1}">${i+1}</div>
+        <div>
+          <div class="tc-name">${escapeHtml(t.name)}</div>
+          <div class="tc-tag">${escapeHtml(t.tag)}</div>
+        </div>
+      </div>
+      <div class="tc-body">
+        <div class="tc-section">
+          <span class="lbl reason">🎯 あなたへのおすすめ理由</span>
+          <div class="tc-reason-box"><p>${aiTag}${escapeHtml(reasonText)}</p></div>
+        </div>
+        <div class="tc-section">
+          <span class="lbl merit">⭕ メリット</span>
+          <p>${escapeHtml(t.merit)}</p>
+        </div>
+        <div class="tc-section">
+          <span class="lbl demerit">⚠️ 知っておきたい点</span>
+          <p>${escapeHtml(t.demerit)}</p>
+        </div>
+      </div>
+      <button class="tc-select">この種別の施設を見る ▶</button>`;
+    card.querySelector('.tc-select').onclick = ()=>{
+      wrap.querySelectorAll('.tc-select').forEach(b=>b.disabled=true);
+      wrap.remove();
+      state.chosenType = k;
+      userBubble(`「${t.name}」の施設を見たいです`);
+      proposeFacilities(k);
+    };
+    wrap.appendChild(card);
+  });
+  chat.appendChild(wrap); scrollDown();
+}
+
+/* ============================================================
+   ステップ7：施設トップ5 → ステップ8：相談CTA
+   ============================================================ */
+const FAC_REASON_SCHEMA = {
+  type: "object",
+  properties: {
+    reasons: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { name: { type: "string" }, reason: { type: "string" } },
+        required: ["name", "reason"],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ["reasons"],
+  additionalProperties: false
+};
+
+async function generateFacilityReasons(key){
+  if(!aiEnabled()) return null;
+  const list = (FACILITIES[key] || []).map(f=>({
+    name: f.name, エリア: state.area + "・" + f.town, 月額: f.price,
+    残室: f.rooms === 0 ? "満室・空き待ち" : `残り${f.rooms}室`
+  }));
+  const system = PERSONA + `
+
+【タスク】
+選ばれた介護施設の種別「${CARE_TYPES[key].name}」に該当する各施設について、このご家族に向けた『おすすめ理由』を一文ずつ生成してください。
+- 各理由は施設カードに載せる一文（40〜70字程度）。
+- ご家族の状況（地域・要介護度・認知症・予算・自由記述・深掘り対話）を踏まえ、その施設のどこがこの方に合うのかを具体的に。
+- 施設名(name)は渡されたものをそのまま使うこと。誇張や事実の創作は避け、自然で信頼感のある表現で。`;
+  const userContent =
+    "■ご家族の状況\n" + profileText() +
+    "\n\n■対象の施設一覧\n" + JSON.stringify(list, null, 2);
+  const txt = await claudeMessages({
+    system,
+    messages: [{ role:"user", content: userContent }],
+    maxTokens: 1600,
+    schema: FAC_REASON_SCHEMA
+  });
+  const data = JSON.parse(txt);
+  const map = {};
+  (data.reasons || []).forEach(r => { map[r.name] = r.reason; });
+  return map;
+}
+
+function proposeFacilities(key){
+  updateProgress(8, "ステップ8 / 8　おすすめ施設");
+  const t = CARE_TYPES[key];
+  botSequence([
+    {t:`「${t.name}」ですね。承知しました。`, d:700},
+    {t:`${state.area}周辺で、ご条件に合う<b>${t.name}をトップ5</b>でご紹介します🌿　残室はリアルタイムで変わるため、気になる施設はお早めにご相談ください。`, d:1000}
+  ], async ()=>{
+    let reasons = null;
+    if(aiEnabled()){
+      const typing = startTyping();
+      try{ reasons = await generateFacilityReasons(key); }
+      catch(e){ notifyAiError(e); reasons = null; }
+      typing.remove();
+      renderFacilityCards(key, reasons);
+      botTyping(700, showCTA);
+    } else {
+      botTyping(1000, ()=>{
+        renderFacilityCards(key, null);
+        botTyping(700, showCTA);
+      });
+    }
+  });
+}
+
+function renderFacilityCards(key, reasons){
+  const list = FACILITIES[key] || [];
+  const wrap = document.createElement('div');
+  wrap.className = 'facility-cards';
+  list.forEach((f,i)=>{
+    const roomClass = (f.rooms<=1) ? 'room few' : 'room';
+    const roomTxt = f.rooms===0 ? '満室・空き待ち' : `残り${f.rooms}室`;
+    const reasonText = (reasons && reasons[f.name]) ? reasons[f.name] : f.reason;
+    const qLabel = (reasons && reasons[f.name]) ? "✨おすすめ" : "おすすめ";
+    const card = document.createElement('div');
+    card.className = 'fac-card';
+    card.innerHTML = `
+      <div class="fac-rank">${i+1}</div>
+      <div class="fac-name">${escapeHtml(f.name)}</div>
+      <div class="fac-meta">
+        <span class="chip">📍 ${escapeHtml(state.area + "・" + f.town)}</span>
+        <span class="chip price">💴 月額 ${escapeHtml(f.price)}</span>
+        <span class="chip ${roomClass}">🛏️ ${roomTxt}</span>
+      </div>
+      <div class="fac-reason"><span class="q">${qLabel}</span><span>${escapeHtml(reasonText)}</span></div>`;
+    wrap.appendChild(card);
+  });
+  chat.appendChild(wrap); scrollDown();
+}
+
+function showCTA(){
+  const urgent = state.timing === "今すぐ〜1ヶ月以内";
+  const soon = state.timing === "1〜3ヶ月以内";
+  const ctaTitle = urgent ? "お急ぎの方こそ、まず相談員へ（無料）"
+                 : (state.timing === "まだ未定（情報収集中）") ? "情報集めの段階でも、気軽に相談員へ（無料）"
+                 : "気になる施設を相談員に無料相談";
+  const ctaDesc = urgent ? "お急ぎとのこと、空室のある施設をすぐにお調べし、最短での見学・入居までスピーディにお手伝いします。"
+                 : soon ? "ご希望の時期に間に合うよう、空室確認から見学予約まで相談員が伴走します。"
+                 : (state.timing === "まだ未定（情報収集中）") ? "今すぐ決めなくてOK。資料請求や見学だけでも、相談員が無料でお手伝いします。"
+                 : "これまでのご回答を引き継いで、ぴったりの施設えらびをお手伝いします。しつこい勧誘はありません。";
+  botBubble("気になる施設は見つかりましたか？　ここから先は、空室確認・費用の詳細・見学予約まで、<b>専門の相談員が無料で</b>サポートします。", {raw:true});
+  const box = document.createElement('div');
+  box.className = 'cta-box';
+  box.innerHTML = `
+    <div class="cta-icon">🤝</div>
+    <div class="cta-title">${escapeHtml(ctaTitle)}</div>
+    <div class="cta-desc">${escapeHtml(ctaDesc)}</div>
+    <button class="cta-btn" id="ctaBtn">無料で相談員に相談する</button>
+    <div class="cta-note">通話・相談はすべて無料です</div>`;
+  chat.appendChild(box);
+  box.querySelector('#ctaBtn').onclick = openModal;
+  scrollDown();
+
+  const r = document.createElement('div');
+  r.className = 'restart';
+  r.innerHTML = `<button id="restartBtn">↺ 最初からやり直す</button>`;
+  chat.appendChild(r);
+  r.querySelector('#restartBtn').onclick = ()=>{
+    chat.innerHTML = '';
+    Object.assign(state,{area:null,care:null,dementia:null,budget:null,constraints:[],priorities:[],free:"",deepDive:[],timing:null,triggers:[],timingDone:false,chosenType:null,top3:[]});
+    start();
+  };
+  scrollDown();
+}
+
+/* ============================================================
+   ダミー相談モーダル
+   ============================================================ */
+const modalBg = document.getElementById('modalBg');
+function openModal(){ modalBg.classList.add('show'); }
+function closeModal(){ modalBg.classList.remove('show'); }
+modalBg.addEventListener('click', e=>{ if(e.target===modalBg) closeModal(); });
+
+/* ============================================================
+   AI設定モーダル
+   ============================================================ */
+const settingsBg = document.getElementById('settingsBg');
+const aiStatusEl = document.getElementById('aiStatus');
+const aiStatusText = document.getElementById('aiStatusText');
+const settingsState = document.getElementById('settingsState');
+
+function refreshAiStatus(){
+  if(aiEnabled()){
+    aiStatusEl.classList.remove('off');
+    aiStatusText.textContent = "AI: オン";
+    settingsState.textContent = "設定済み（AIパーソナライズ有効）";
+  } else {
+    aiStatusEl.classList.add('off');
+    aiStatusText.textContent = "AI設定";
+    settingsState.textContent = "未設定（固定文で動作します）";
+  }
+}
+function openSettings(){
+  document.getElementById('apiKeyInput').value = apiKey;
+  refreshAiStatus();
+  settingsBg.classList.add('show');
+}
+function closeSettings(){ settingsBg.classList.remove('show'); }
+function saveKey(){
+  apiKey = document.getElementById('apiKeyInput').value.trim();
+  if(apiKey) localStorage.setItem("anthropicApiKey", apiKey);
+  else localStorage.removeItem("anthropicApiKey");
+  refreshAiStatus();
+  closeSettings();
+}
+function clearKey(){
+  apiKey = "";
+  localStorage.removeItem("anthropicApiKey");
+  document.getElementById('apiKeyInput').value = "";
+  refreshAiStatus();
+}
+settingsBg.addEventListener('click', e=>{ if(e.target===settingsBg) closeSettings(); });
+
+// AIエラーをそっと通知（フロー自体は固定文で継続）
+function notifyAiError(e){
+  const msg = (e && e.message) ? e.message : "";
+  if(msg === "refusal") return; // 安全上の拒否は黙って固定文へ
+  botBubble("（AIパーソナライズの呼び出しに問題がありました。固定の案内に切り替えます。APIキーや通信をご確認ください）", {ai:false});
+}
+
+/* 起動 */
+refreshAiStatus();
+start();
+</script>
+</body>
+</html>
